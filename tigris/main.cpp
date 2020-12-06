@@ -27,7 +27,7 @@
 //Forward declarations
 class Player;
 class Board;
-class Cell;
+class Token;
 
 struct Position
 {
@@ -82,6 +82,58 @@ bool existsType(std::string t)
 	
 };
 
+class Cell
+{
+public:
+
+
+	Cell(const int& x, const int& y, const int& t)
+	{
+		pos.x = x;
+		pos.y = y;
+		type = static_cast<CellType>(t);
+	}
+
+	bool isEmpty() { if (token == nullptr) return true; else return false; };
+
+	CellType getType() { return type; };
+
+	Position getPosition() { return pos; };
+
+	void setToken(Token* t) { token = t; };
+
+private:
+	Position pos;
+	CellType type;
+	Token* token = nullptr;;
+};
+
+static class Board
+{
+public:
+	~Board() { delete[] cells; };
+	std::vector<int> init_board
+	{
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 2, 0,
+		0, 2, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+		1, 1, 1, 1, 0, 0, 0, 0, 2, 0, 0, 0, 1, 1, 1, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1,
+		1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,
+		0, 0, 0, 1, 1, 2, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
+		0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2,
+		0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 2, 0, 1, 0, 0, 0
+	};
+	Cell *cells[BOARD_WIDTH][BOARD_LENGTH];
+	void init();
+
+	Cell* getCell(const Position& pos)
+	{
+		return cells[pos.x][pos.y];
+	};
+};
 
 class Token 
 {
@@ -221,31 +273,7 @@ private:
 };
 
 
-class Cell
-{
-public:
 
-
-	Cell(const int& x, const int& y, const int& t)
-	{
-		pos.x = x;
-		pos.y = y;
-		type = static_cast<CellType>(t);
-	}
-
-	bool isEmpty() { if (token == nullptr) return true; else return false; };
-
-	CellType getType() { return type; };
-
-	Position getPosition() { return pos; };
-
-	void setToken(Token* t) { token = t;};
-
-private:
-	Position pos;
-	CellType type;
-	Token* token = nullptr;;
-};
 
 Position Token::getPosition() 
 {
@@ -259,32 +287,6 @@ Position Token::getPosition()
 	return p;
 };
 
-static class Board
-{
-public:
-	~Board() { delete[] cells; };
-	std::vector<int> init_board
-	{ 
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 2, 0,
-		0, 2, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0,
-		1, 1, 1, 1, 0, 0, 0, 0, 2, 0, 0, 0, 1, 1, 1, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1,
-		1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,
-		0, 0, 0, 1, 1, 2, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
-		0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2,
-		0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 2, 0, 1, 0, 0, 0
-	};
-	Cell *cells[BOARD_WIDTH][BOARD_LENGTH];
-	void init();
-	
-	Cell* getCell(const Position& pos) 
-	{
-		return cells[pos.x][pos.y];
-	};
-};
 
 void Board::init()
 {
