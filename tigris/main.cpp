@@ -26,8 +26,10 @@
 
 //Forward declarations
 class Player;
-class Board;
 class Token;
+class Tile;
+
+
 
 struct Position
 {
@@ -40,7 +42,8 @@ enum class Type
 	black,
 	red,
 	green,
-	blue
+	blue,
+	invalid
 };
 
 enum class CellType
@@ -57,18 +60,19 @@ Type checkType(std::string t)
 	{
 		return Type::black;
 	}
-	if (t == "farm" || t == "farmer")
+	else if (t == "farm" || t == "farmer")
 	{
 		return Type::blue;
 	}
-	if (t == "temple" || t == "priest")
+	else if (t == "temple" || t == "priest")
 	{
 		return Type::red;
 	}
-	if (t == "market" || t == "merchant")
+	else if (t == "market" || t == "merchant")
 	{
 		return Type::green;
 	}
+	else return Type::invalid;
 };
 
 bool existsType(std::string t)
@@ -102,18 +106,21 @@ public:
 
 	Position getPosition() { return pos; };
 
-	void setToken(Token* t) { token = t; };
+	void setToken(Token* t);
 
 private:
 	Position pos;
 	CellType type;
-	Token* token = nullptr;;
+	Token* token = nullptr;
 };
 
-static class Board
+
+class Board
 {
 public:
-	~Board() { delete[] cells; };
+
+	Board();
+	//~Board() { delete[] cells; };
 	std::vector<int> init_board
 	{
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
@@ -135,7 +142,42 @@ public:
 	{
 		return cells[pos.x][pos.y];
 	};
+
+	bool placeTile(Tile* tile, std::vector<std::string> args);
 };
+
+bool Board::placeTile(Tile* tile, std::vector<std::string> args)
+{
+	//Check if position is correct within the board dimensions.
+	Position p;
+	p.x = std::stoi(args[2]);
+	p.y = std::stoi(args[3]);
+	if (p.x < 0 || p.x > BOARD_WIDTH || p.y < 0 || p.y > BOARD_LENGTH)
+	{
+		std::cout << "exception: invalid board space position \n";
+		return false;
+	}
+
+	//Check if the tile is a farm. Farms can only be places on river tiles.
+	Cell* cell = getCell(p);
+	if ((cell->getType() == CellType::RIVER && args[1] != "farm") || (cell->getType() != CellType::RIVER && args[1] == "farm"))
+	{
+		std::cout << "exception: only farms can be placed in a river tile \n";
+		cell = nullptr;
+		return false;
+	}
+
+	//Check if that cell is alredy ocupied.
+	if (!cell->isEmpty() && !cell->hasTemple())
+	{
+		std::cout << "exception: board space is already occupied \n";
+		cell = nullptr;
+		return false;
+	}
+	//tile->setCell(cell);
+	cell->setToken((Token*)tile);
+	return true;
+}
 
 class Token 
 {
@@ -154,7 +196,7 @@ public:
 	Type getType() { return type; };
 
 	Position getPosition();
-	virtual bool placeToken() { return false; };
+	void setCell(Cell*c) { if (c != nullptr) cell = c; };
 
 protected:
 	Cell* cell;
@@ -163,43 +205,20 @@ protected:
 	Board* board;
 };
 
+void Cell::setToken(Token* t)
+{
+	token = t;
+};
+
 class Tile :  public Token
 {
 	using Token::Token;
 
 public:
-	 bool placeToken(std::vector<std::string> args)
-	{
-		//Check if position is correct within the board dimensions.
-		Position p;
-		p.x = stoi(args[2]);
-		p.y = stoi(args[3]);
-		if (p.x < 0 || p.x > BOARD_WIDTH || p.y < 0 || p.y > BOARD_LENGTH)
-		{
-			std::cout << "exception: invalid board space position \n";
-			return false;
-		}
 
-		//Check if the tile is a farm. Farms can only be places on river tiles.
-		cell = board->getCell(p);
-		if ((cell->getType() == CellType::RIVER && args[1] != "farm") || (cell->getType() != CellType::RIVER && args[1] == "farm"))		
-		{
-			std::cout << "exception: only farms can be placed in a river tile \n";
-			cell = nullptr;
-			return false;
-		}
-
-		//Check if that cell is alredy ocupied.
-		if (!cell->isEmpty() && !cell->hasTemple())
-		{
-			std::cout << "exception: board space is already occupied \n";
-			cell = nullptr;
-			return false;
-		}
-		cell->setToken(this);
-		return true;
-	};
 };
+
+
 
 class Leader : public Token
 {
@@ -249,12 +268,12 @@ public:
 	std::vector<Tile*> tiles;
 	std::vector<Leader*> leaders;
 
-	void placeTyle(const std::vector<std::string>& args)
+	bool placeTile(const std::vector<std::string>& args)
 	{
 		if (!existsType(args[1]))
 		{
-			std::cout << "exception: could not parse tyle type";
-			return;
+			std::cout << "exception: could not parse tyle type \n";
+			return false;
 		};
 
 		for (int i = 0; i < tiles.size(); ++i)
@@ -262,19 +281,36 @@ public:
 			bool found = false;
 			if (tiles[i]->getType() == checkType(args[1]))
 			{
-				if (tiles[i]->placeToken(args))
+				if (board->placeTile(tiles[i], args))
 				{
 					tiles.erase(tiles.begin() + i);
 					found = true;
-					return;
+					return true;;
 				}
+				else
+					return false;
 			}
 		};
-		std::cout << "exception: could not find tile of specified tile";	
+		std::cout << "exception: could not find tile of specified tile \n";	
+		return false;
+	};
+
+	void resetActions() { actions = 2; };
+	void useAction() { --actions; };
+	bool hasActionsLeft() {
+		if (actions != 0) {
+			return true;
+		}
+		else
+		{
+			std::cout << "exception: too many turn actions \n";
+			return false;
+		}
 	};
 
 private:
 	Board* board;
+	int actions = 2;
 };
 
 
@@ -295,6 +331,7 @@ Position Token::getPosition()
 
 void Board::init()
 {
+	const Player* p = nullptr;
 	int count = 0;
 	for (int i = 0; i < BOARD_LENGTH; ++i)
 	{
@@ -302,6 +339,10 @@ void Board::init()
 		{
 			Cell* c = new Cell(i, j, init_board[count]);
 			cells[j][i] = c;
+			if (c->hasTemple())
+			{
+				c->setToken(new Tile(this, p, c, Type::red));
+			}
 			++count;
 		}
 	}
@@ -325,12 +366,10 @@ public:
 
 	Game() 
 	{
-		board = new Board();
-		board->init();
+
 	};
 	~Game()
 	{
-		delete board;
 	}
 
 	void addNewPlayer(std::string initial_tiles) 
@@ -364,23 +403,25 @@ public:
 
 	void startGame(std::vector<std::string> input_lines)
 	{
-		for(int i = 0; i< input_lines.size(); ++i)
+		board = new Board();
+		board->init();
+
+		for(int i = 0; i < input_lines.size(); ++i)
 		{
 
 			if (input_lines[i] == "----")
 			{
+				players[current_player]->resetActions();
 				nextPlayer();
-				break;
+				continue;
 			}
 
 
 			size_t pos = 0;
 			std::string delimiter = " ";
 			std::vector<std::string> arguments;
-			while (pos = input_lines[i].find(delimiter))
+			while ((pos = input_lines[i].find(delimiter)) < 20)
 			{
-				if (pos > 20)
-					break;
 				arguments.emplace_back(input_lines[i].substr(0, pos));
 				input_lines[i].erase(0, pos + delimiter.length());
 			}
@@ -395,7 +436,11 @@ public:
 				{
 					std::cout << "invalid command \n";
 				};
-				players[current_player]->placeTyle(arguments);
+				if (players[current_player]->hasActionsLeft())
+				{
+					if(players[current_player]->placeTile(arguments))
+						players[current_player]->useAction();
+				}
 				break;
 
 			case refresh:
@@ -440,9 +485,10 @@ public:
 		return invalid;
 	}
 
+	void initGame();
+
 
 private:
-
 	//index to track the current player
 	int current_player;
 	std::vector<Player*> players;
@@ -454,6 +500,8 @@ int main()
 	Game g;
 	std::string command;
 	
+	g.initGame();
+
 	//Read all the Players initialization, untill "----"
 	char c_delimeter('-');
 	std::getline(std::cin, command, c_delimeter);
@@ -475,4 +523,10 @@ int main()
 	g.startGame(input_reading);
 
 	return 0;
+}
+
+void Game::initGame()
+{
+	board = new Board();
+	board->init();;
 }
