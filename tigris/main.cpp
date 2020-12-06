@@ -28,7 +28,8 @@
 class Player;
 class Token;
 class Tile;
-
+class Game;
+class Board;
 
 
 struct Position
@@ -118,8 +119,6 @@ private:
 class Board
 {
 public:
-
-	Board();
 	//~Board() { delete[] cells; };
 	std::vector<int> init_board
 	{
@@ -366,7 +365,8 @@ public:
 
 	Game() 
 	{
-
+		board = new Board();
+		board->init();;
 	};
 	~Game()
 	{
@@ -485,8 +485,6 @@ public:
 		return invalid;
 	}
 
-	void initGame();
-
 
 private:
 	//index to track the current player
@@ -499,8 +497,6 @@ int main()
 {
 	Game g;
 	std::string command;
-	
-	g.initGame();
 
 	//Read all the Players initialization, untill "----"
 	char c_delimeter('-');
@@ -523,10 +519,4 @@ int main()
 	g.startGame(input_reading);
 
 	return 0;
-}
-
-void Game::initGame()
-{
-	board = new Board();
-	board->init();;
 }
