@@ -143,10 +143,42 @@ public:
 		return cells[pos.x][pos.y];
 	};
 
-	bool placeTile(Tile* tile, std::vector<std::string> args);
+	bool placeToken(Token* tile, std::vector<std::string> args);
+
+	bool hasTemple(const Position &pos)
+	{
+		Cell* c = getCell(pos);
+		return c->hasTemple();
+	}
+
+	bool hasAdjacentTemple(const Position &pos)
+	{
+		Cell* c = getCell(pos);
+		if (pos.x + 1 <= BOARD_WIDTH)
+		{
+			if (hasTemple(pos))
+				return true;
+		}
+		if (pos.x - 1 >= 0)
+		{
+			if (hasTemple(pos))
+				return true;
+		}
+		if (pos.y + 1 <= BOARD_LENGTH)
+		{
+			if (hasTemple(pos))
+				return true;
+		}
+		if (pos.y - 1 >= 0)
+		{
+			if (hasTemple(pos))
+				return true;
+		}
+		return false;
+	}
 };
 
-bool Board::placeTile(Tile* tile, std::vector<std::string> args)
+bool Board::placeToken(Token* token, std::vector<std::string> args)
 {
 	//Check if position is correct within the board dimensions.
 	Position p;
@@ -175,7 +207,7 @@ bool Board::placeTile(Tile* tile, std::vector<std::string> args)
 		return false;
 	}
 	//tile->setCell(cell);
-	cell->setToken((Token*)tile);
+	cell->setToken(token);
 	return true;
 }
 
@@ -226,13 +258,6 @@ public:
 
 	using Token::Token;
 	
-	enum class Type
-	{
-		king,
-		priest,
-		merchant,
-		farmer
-	}; 
 
 };
 
@@ -278,7 +303,7 @@ public:
 			bool found = false;
 			if (tiles[i]->getType() == checkType(args[1]))
 			{
-				if (board->placeTile(tiles[i], args))
+				if (board->placeToken(tiles[i], args))
 				{
 					tiles.erase(tiles.begin() + i);
 					found = true;
@@ -454,6 +479,9 @@ public:
 					if(players[current_player]->placeTile(arguments))
 						players[current_player]->useAction();
 				}
+				break;
+
+			case leader:
 				break;
 
 			case refresh:
