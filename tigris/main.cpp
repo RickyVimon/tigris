@@ -141,6 +141,11 @@ class Region
 {
 public:
 	Region(const std::vector<Tile*> &r_t) : region_tiles(r_t) {}
+	Region(Tile* tile) 
+	{
+		region_tiles.emplace_back(tile);
+	}
+
 public:
 	std::vector<Tile*> region_tiles;
 };
@@ -158,52 +163,20 @@ public:
 		return cells[pos.x][pos.y];
 	};
 
+	bool hasCellTemple(const Position &pos);
+	Region* getRegion(const Position &pos);
+	bool hasCellRegion(const Position & pos);
+	bool isCellEmpty(const Position &pos);
 	bool placeToken(Token* tile, std::vector<std::string> args, bool isLeader);
-
-	bool hasCellTemple(const Position &pos)
-	{
-		Cell* c = getCell(pos);
-		return c->hasTemple();
-	}
-
-	bool isCellEmpty(const Position &pos)
-	{
-		Cell* c = getCell(pos);
-		return c->isEmpty();
-	}
-
-	bool hasAdjacentTemple(const Position &pos)
-	{
-		Cell* c = getCell(pos);
-		if (pos.x + 1 <= BOARD_WIDTH)
-		{
-			if (hasCellTemple(pos))
-				return true;
-		}
-		if (pos.x - 1 >= 0)
-		{
-			if (hasCellTemple(pos))
-				return true;
-		}
-		if (pos.y + 1 <= BOARD_LENGTH)
-		{
-			if (hasCellTemple(pos))
-				return true;
-		}
-		if (pos.y - 1 >= 0)
-		{
-			if (hasCellTemple(pos))
-				return true;
-		}
-		return false;
-	}
-
-
+	std::vector<Region*> getAdjacentRegions(const Position &p);
 	void checkKingdoms(std::vector<Token*> adjacent_tokens, Token* token, bool isLeader);
-	//void checkKingdoms(std::vector<Token*> adjacent_tokens, Leader* leader);
-	std::vector<Token*> getAdjacentTokens(Token* token, const Position &pos);
-	
 
+	void newRegion(const std::vector<Tile*> &tiles);
+	void newRegion(Tile* tile);
+
+	std::vector<Token*> getAdjacentTokens(Token* token, const Position &pos);
+	bool hasAdjacentTemple(const Position &pos);
+	
 public:
 	std::vector<int> init_board
 	{
@@ -221,7 +194,9 @@ public:
 	};
 	Cell *cells[BOARD_WIDTH][BOARD_LENGTH];
 
-	std::list<Token*> region;
+
+	std::vector<Region*> regions;
+	std::vector<Kingdom*> kingdoms;
 
 };
 
@@ -243,10 +218,10 @@ public:
 	Type getType() { return type; };
 
 	Position getPosition();
-	void setCell(Cell*c) { if (c != nullptr) cell = c; };
+	void setCell(Cell*c);
+	void checkAdjacentKingdomsOrRegions();
 	void setRegion(Region* r) { if (r != nullptr) region = r; };
 	void setKingdom(Kingdom* k) { if (k != nullptr) kingdom = k; };
-
 	Kingdom* getKingdom() { return kingdom; };
 	Region* getRegion() { return region; };
 
@@ -268,6 +243,8 @@ class Tile : public Token
 	using Token::Token;
 
 public:
+
+	void checkAdjacentKingdomsOrRegions();
 
 };
 
@@ -337,6 +314,71 @@ private:
 };
 
 
+//----------------------------------------------------------------END OF THE HEADER----------------------------------------------------
+
+void Token::setCell(Cell*c)
+{
+	cell = c;
+	checkAdjacentKingdomsOrRegions();
+}
+
+/*
+void Leader::checkAdjacentKingdomsOrRegions()
+{
+	std::vector<Token*> adjacent_tokens = board->getAdjacentTokens(this, cell->getPosition());
+
+	for(unsigned int i = 0; i < adjacent_tokens.size();++i)
+	{
+		if(adjacent_tokens[i]->isRegion())
+	}
+	
+}
+*/
+
+void Tile::checkAdjacentKingdomsOrRegions()
+{
+	std::vector<Token*> adjacent_tokens = board->getAdjacentTokens(this, cell->getPosition());
+
+	switch (adjacent_tokens.size())
+	{
+	case 0:
+		board->newRegion(this);
+		//new region
+		break;
+	case 1:
+		break;
+	case 2:
+		break;
+	case 3:
+		break;
+	case 4:
+		break;
+	default:
+		break;
+	}
+	//if(adjacent_tokens.size()  1)
+	for (unsigned int i = 0; i < adjacent_tokens.size(); ++i)
+	{
+		if (adjacent_tokens[i]->isRegion())
+		{
+
+		}
+	}
+
+}
+
+void Board::newRegion(const std::vector<Tile*> &tiles)
+{
+	Region* region = new Region(tiles);
+	regions.emplace_back(region);
+}
+
+void Board::newRegion(Tile* tile)
+{
+	Region* region = new Region(tile);
+	regions.emplace_back(region);
+}
+
 std::vector<Token*> Board::getAdjacentTokens(Token* token, const Position &pos)
 {
 	std::vector<Token*> adjacent_tokens;
@@ -366,6 +408,70 @@ std::vector<Token*> Board::getAdjacentTokens(Token* token, const Position &pos)
 	return adjacent_tokens;
 }
 
+bool Board::hasAdjacentTemple(const Position &pos)
+{
+	if (pos.x + 1 <= BOARD_WIDTH)
+	{
+		if (hasCellTemple(pos))
+			return true;
+	}
+	if (pos.x - 1 >= 0)
+	{
+		if (hasCellTemple(pos))
+			return true;
+	}
+	if (pos.y + 1 <= BOARD_LENGTH)
+	{
+		if (hasCellTemple(pos))
+			return true;
+	}
+	if (pos.y - 1 >= 0)
+	{
+		if (hasCellTemple(pos))
+			return true;
+	}
+	return false;
+
+}
+
+bool Board::isCellEmpty(const Position &pos)
+{
+	Cell* c = getCell(pos);
+	return c->isEmpty();
+}
+
+bool Board::hasCellTemple(const Position &pos)
+{
+	Cell* c = getCell(pos);
+	return c->hasTemple();
+}
+
+Region* Board::getRegion(const Position &pos)
+{
+	Region* r = nullptr;
+	Cell* c = getCell(pos);
+	if (!c->isEmpty())
+	{
+		Token* t = c->getToken();
+		if (t->isRegion())
+		{
+			r = t->getRegion();
+			return r;
+		}
+	}
+
+		return r;
+}
+
+bool Board::hasCellRegion(const Position &pos)
+{
+	Cell* c = getCell(pos);
+	Token* t = c->getToken();
+	if (t->isRegion())
+		return true;
+	else
+		return false;
+}
 
 void Board::checkKingdoms(std::vector<Token*> adjacent_tokens, Token* token, bool isLeader = false)
 {
@@ -383,9 +489,9 @@ void Board::checkKingdoms(std::vector<Token*> adjacent_tokens, Token* token, boo
 	switch (kingdoms.size())
 	{
 	case 0:
-		//checkAdjacentRegions and join the region
 		if (isLeader)
 		{
+			//checkAdjacentRegions and join the region
 			//create kingdom.
 		}
 		break;
@@ -396,7 +502,7 @@ void Board::checkKingdoms(std::vector<Token*> adjacent_tokens, Token* token, boo
 		{
 			kingdoms[0]->leaders.emplace_back((Leader*)token);
 		}
-		else 
+		else
 		{
 			kingdoms[0]->kingdom_tiles.emplace_back((Tile*)token);
 		}
@@ -413,40 +519,6 @@ void Board::checkKingdoms(std::vector<Token*> adjacent_tokens, Token* token, boo
 
 }
 
-/*
-void Board::checkKingdoms(std::vector<Token*> adjacent_tokens, Leader* leader)
-{
-
-	std::vector<Kingdom*> kingdoms;
-	for (int i = 0; i < adjacent_tokens.size(); ++i)
-	{
-		if (adjacent_tokens[i]->isKingdom())
-		{
-			Kingdom* k = adjacent_tokens[i]->getKingdom();
-			kingdoms.emplace_back(k);
-		}
-	}
-
-	switch (kingdoms.size())
-	{
-	case 0:
-		break;
-	case 1:
-		//add the tile to the kingdom;
-		leader->setKingdom(kingdoms[0]);
-		kingdoms[0]->leaders.emplace_back(leader);
-		break;
-
-	case 2:
-		//war
-		break;
-	default:
-		std::cout << "exception: cannot place a tile which could unite 3 or more kingdoms. \n";
-		break;
-	}
-
-}
-*/
 
 bool Board::placeToken(Token* token, std::vector<std::string> args, bool isLeader = false)
 {
@@ -486,19 +558,53 @@ bool Board::placeToken(Token* token, std::vector<std::string> args, bool isLeade
 		}
 		else //Leaders cannot be placed between two kingdoms
 		{
+			//checkkingdoms
 
+			std::vector<Region*> regions = getAdjacentRegions(p);
+
+			switch (regions.size())
+			{
+				//TODO
+			}
 		}
 	}
 
 	cell->setToken(token);
+	token->setCell(cell);
 	return true;
 }
 
+std::vector<Region*> Board::getAdjacentRegions(const Position &pos)
+{
+	Region* new_region;
+	std::vector<Region*> regions;
 
-
-
-
-
+	if (pos.x + 1 <= BOARD_WIDTH)
+	{
+		new_region = getRegion(pos);
+		if (new_region != nullptr)
+			regions.emplace_back(new_region);
+	}
+	if (pos.x - 1 >= 0)
+	{
+		new_region = getRegion(pos);
+		if (new_region != nullptr)
+			regions.emplace_back(new_region);
+	}
+	if (pos.y + 1 <= BOARD_LENGTH)
+	{
+		new_region = getRegion(pos);
+		if (new_region != nullptr)
+			regions.emplace_back(new_region);
+	}
+	if (pos.y - 1 >= 0)
+	{
+		new_region = getRegion(pos);
+		if (new_region != nullptr)
+			regions.emplace_back(new_region);
+	}
+	return regions;
+}
 
 void Player::setTiles(std::string token_line)
 {
@@ -523,13 +629,11 @@ bool Player::placeTile(const std::vector<std::string>& args)
 
 	for (unsigned int i = 0; i < tiles.size(); ++i)
 	{
-		bool found = false;
 		if (tiles[i]->getType() == checkType(args[1]))
 		{
 			if (board->placeToken(tiles[i], args))
 			{
 				tiles.erase(tiles.begin() + i);
-				found = true;
 				return true;;
 			}
 			else
@@ -786,7 +890,7 @@ private:
 void Game::nextPlayer()
 {
 
-	if (unsigned int(current_player + 1) >= players.size())
+	if ((unsigned int)(current_player + 1) >= players.size())
 	{
 		current_player = 0;
 		for (unsigned int i = 0; i < players.size(); ++i)
