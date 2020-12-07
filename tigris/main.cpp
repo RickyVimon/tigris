@@ -205,9 +205,9 @@ class Token
 {
 
 public:
-	Token(Board* b, const Player* &p, Cell* c, Type t) : board(b), owner(p), cell(c), type(t) {}
+	Token(Board* b, Player* p, Cell* c, Type t) : board(b), owner(p), cell(c), type(t) {}
 
-	Token(Board* b, const Player* &p, Cell* c, std::string t)
+	Token(Board* b, Player* p, Cell* c, std::string t)
 	{
 		board = b;
 		owner = p;
@@ -227,9 +227,11 @@ public:
 	bool isRegion() { if (region == nullptr) return false; else return true; };
 	bool isKingdom() { if (kingdom == nullptr) return false; else return true; };
 
+public:
+	Player* owner;
+
 protected:
 	Cell* cell;
-	const Player* owner;
 	Type type;
 	Board* board;
 	Region* region = nullptr;
@@ -260,14 +262,14 @@ public:
 class Player
 {
 public:
-	const Player* myself = this;
+	
 	Player(Board* b, std::string starting_tiles)
 	{
 		board = b;
-		leaders.emplace_back(new Leader(board, myself, nullptr, Type::black));
-		leaders.emplace_back(new Leader(board, myself, nullptr, Type::red));
-		leaders.emplace_back(new Leader(board, myself, nullptr, Type::green));
-		leaders.emplace_back(new Leader(board, myself, nullptr, Type::blue));
+		leaders.emplace_back(new Leader(board, this, nullptr, Type::black));
+		leaders.emplace_back(new Leader(board, this, nullptr, Type::red));
+		leaders.emplace_back(new Leader(board, this, nullptr, Type::green));
+		leaders.emplace_back(new Leader(board, this, nullptr, Type::blue));
 
 		setTiles(starting_tiles);
 
@@ -305,6 +307,8 @@ public:
 
 	int getTreasures() { return treasures; };
 
+	void winPoint(const int &index);
+
 private:
 	Board* board;
 	int actions = 2;
@@ -315,11 +319,18 @@ private:
 
 //----------------------------------------------------------------END OF THE HEADER----------------------------------------------------
 
+void Player::winPoint(const int &index)
+{
+	if(index >= 0 && index < victory_points.size())
+	++victory_points[index];
+}
+
 void Token::setCell(Cell*c)
 {
 	cell = c;
 	
 }
+
 
 /*
 void Leader::checkAdjacentKingdomsOrRegions()
@@ -341,13 +352,47 @@ void Tile::checkAdjacentKingdomsOrRegions()
 	switch (adjacent_tokens.size())
 	{
 	case 0:
+		//New Region
 		board->newRegion(this);
-		//new region
 		break;
+
 	case 1:
+		//Join Region or Kingdom
+		if (adjacent_tokens[1]->isKingdom())
+		{
+			kingdom = adjacent_tokens[1]->getKingdom();
+			kingdom->kingdom_tiles.emplace_back(this);
+
+			//check if this action is rewarded with points
+			for (unsigned int i = 0; i < kingdom->leaders.size(); ++i)
+			{
+				if (kingdom->leaders[i]->getType() == Type::black)
+				{
+					//Add one victory point for the owner of the king
+					kingdom->leaders[i]->owner->winPoint((const int)Type::black);
+				}
+				else if (kingdom->leaders[i]->getType() == type)
+				{
+					owner->winPoint((const int)type);
+				}
+			}
+		}
+		else
+		{
+			region = adjacent_tokens[1]->getRegion();
+			region->region_tiles.emplace_back(this);
+		}
 		break;
+
 	case 2:
+		if (adjacent_tokens[0]->getRegion() != adjacent_tokens[1]->getRegion())
+		{
+			//Disvolve into a bigger region
+		}
+		else //Join the kingdom
+			adjacent_tokens[0]->getRegion()->region_tiles.emplace_back(this);
 		break;
+
 	case 3:
 		break;
 	case 4:
@@ -611,10 +656,10 @@ void Player::setTiles(std::string token_line)
 	std::string tile_type;
 	while ((pos = token_line.find(" ")) != std::string::npos) {
 		tile_type = token_line.substr(0, pos);
-		tiles.emplace_back(new Tile(board, myself, nullptr, tile_type));
+		tiles.emplace_back(new Tile(board, this, nullptr, tile_type));
 		token_line.erase(0, pos + 1);
 	}
-	tiles.emplace_back(new Tile(board, myself, nullptr, tile_type));
+	tiles.emplace_back(new Tile(board, this, nullptr, tile_type));
 
 };
 
@@ -685,7 +730,7 @@ void Player::refreshTiles(std::vector<std::string> args)
 	for (unsigned int i = 2; i < args.size(); ++i)
 	{
 		if (checkType(args[i]) != Type::invalid)
-			tiles.emplace_back(new Tile(board, myself, nullptr, checkType(args[i])));
+			tiles.emplace_back(new Tile(board, this, nullptr, checkType(args[i])));
 		else
 			std::cout << "exception: invalid number or player tiles \n";
 	}
@@ -708,7 +753,7 @@ Position Token::getPosition()
 
 void Board::init()
 {
-	const Player* p = nullptr;
+	Player* p = nullptr;
 	int count = 0;
 	for (int i = 0; i < BOARD_LENGTH; ++i)
 	{
