@@ -28,9 +28,11 @@
 class Player;
 class Token;
 class Tile;
+class Leader;
 class Game;
 class Board;
 class Cell;
+
 
 
 struct Position
@@ -109,6 +111,7 @@ public:
 	Position getPosition() { return pos; };
 
 	void setToken(Token* t);
+	Token* getToken() { return token; };
 
 private:
 	Position pos;
@@ -121,6 +124,81 @@ class Board
 {
 public:
 	//~Board() { delete[] cells; };
+	void init();
+
+	Cell* getCell(const Position& pos)
+	{
+		return cells[pos.x][pos.y];
+	};
+
+	bool placeToken(Token* tile, std::vector<std::string> args);
+
+	bool hasCellTemple(const Position &pos)
+	{
+		Cell* c = getCell(pos);
+		return c->hasTemple();
+	}
+
+	bool isCellEmpty(const Position &pos)
+	{
+		Cell* c = getCell(pos);
+		return c->isEmpty();
+	}
+
+	bool hasAdjacentTemple(const Position &pos)
+	{
+		Cell* c = getCell(pos);
+		if (pos.x + 1 <= BOARD_WIDTH)
+		{
+			if (hasCellTemple(pos))
+				return true;
+		}
+		if (pos.x - 1 >= 0)
+		{
+			if (hasCellTemple(pos))
+				return true;
+		}
+		if (pos.y + 1 <= BOARD_LENGTH)
+		{
+			if (hasCellTemple(pos))
+				return true;
+		}
+		if (pos.y - 1 >= 0)
+		{
+			if (hasCellTemple(pos))
+				return true;
+		}
+		return false;
+	}
+
+	bool hasAdjacentRegion(const Position &pos)
+	{
+		Cell* c = getCell(pos);
+		if (pos.x + 1 <= BOARD_WIDTH)
+		{
+			if (!isCellEmpty(pos))
+				Token* t = c->getToken();
+				return true;
+		}
+		if (pos.x - 1 >= 0)
+		{
+			if (!isCellEmpty(pos))
+				return true;
+		}
+		if (pos.y + 1 <= BOARD_LENGTH)
+		{
+			if (!isCellEmpty(pos))
+				return true;
+		}
+		if (pos.y - 1 >= 0)
+		{
+			if (!isCellEmpty(pos))
+				return true;
+		}
+		return false;
+	}
+
+public:
 	std::vector<int> init_board
 	{
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
@@ -136,46 +214,9 @@ public:
 		0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 2, 0, 1, 0, 0, 0
 	};
 	Cell *cells[BOARD_WIDTH][BOARD_LENGTH];
-	void init();
 
-	Cell* getCell(const Position& pos)
-	{
-		return cells[pos.x][pos.y];
-	};
+	std::list<Token*> region;
 
-	bool placeToken(Token* tile, std::vector<std::string> args);
-
-	bool hasTemple(const Position &pos)
-	{
-		Cell* c = getCell(pos);
-		return c->hasTemple();
-	}
-
-	bool hasAdjacentTemple(const Position &pos)
-	{
-		Cell* c = getCell(pos);
-		if (pos.x + 1 <= BOARD_WIDTH)
-		{
-			if (hasTemple(pos))
-				return true;
-		}
-		if (pos.x - 1 >= 0)
-		{
-			if (hasTemple(pos))
-				return true;
-		}
-		if (pos.y + 1 <= BOARD_LENGTH)
-		{
-			if (hasTemple(pos))
-				return true;
-		}
-		if (pos.y - 1 >= 0)
-		{
-			if (hasTemple(pos))
-				return true;
-		}
-		return false;
-	}
 };
 
 bool Board::placeToken(Token* token, std::vector<std::string> args)
@@ -206,10 +247,33 @@ bool Board::placeToken(Token* token, std::vector<std::string> args)
 		cell = nullptr;
 		return false;
 	}
-	//tile->setCell(cell);
+
+	//Check if the new token collides with some other to add up a region or a kingdom.
+
+
 	cell->setToken(token);
 	return true;
 }
+
+class Region
+{	
+public:
+	Region(const std::vector<Tile*> &r_t) : region_tiles(r_t) {}
+public:
+	std::vector<Tile*> region_tiles;
+};
+
+class Kingdom
+{
+public: 
+	Kingdom(const std::vector<Tile*> &k_t, Leader* lead) : kingdom_tiles(k_t) 
+	{
+		leaders.emplace_back(lead);
+	}
+public:
+	std::vector<Tile*> kingdom_tiles;
+	std::vector<Leader*> leaders;
+};
 
 class Token 
 {
@@ -229,12 +293,16 @@ public:
 
 	Position getPosition();
 	void setCell(Cell*c) { if (c != nullptr) cell = c; };
+	void setRegion(Region* r) { if (r != nullptr) region = r; };
+	void setKingdom(Kingdom* k) { if (k != nullptr) kingdom = k; };
 
 protected:
 	Cell* cell;
 	const Player* owner;
 	Type type;
 	Board* board;
+	Region* region;
+	Kingdom* kingdom;
 };
 
 void Cell::setToken(Token* t)
