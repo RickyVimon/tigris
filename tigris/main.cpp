@@ -219,7 +219,6 @@ public:
 
 	Position getPosition();
 	void setCell(Cell*c);
-	void checkAdjacentKingdomsOrRegions();
 	void setRegion(Region* r) { if (r != nullptr) region = r; };
 	void setKingdom(Kingdom* k) { if (k != nullptr) kingdom = k; };
 	Kingdom* getKingdom() { return kingdom; };
@@ -319,7 +318,7 @@ private:
 void Token::setCell(Cell*c)
 {
 	cell = c;
-	checkAdjacentKingdomsOrRegions();
+	
 }
 
 /*
