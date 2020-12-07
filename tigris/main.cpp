@@ -265,9 +265,6 @@ public:
 
 	};
 
-	std::vector<Tile*> tiles;
-	std::vector<Leader*> leaders;
-
 	bool placeTile(const std::vector<std::string>& args)
 	{
 		if (!existsType(args[1]))
@@ -307,6 +304,21 @@ public:
 			return false;
 		}
 	};
+
+	void refreshTiles(std::vector<std::string> args)
+	{
+		for (int i = 2; i < args.size(); ++i)
+		{
+			if(checkType(args[i]) != Type::invalid)
+				tiles.emplace_back(new Tile(board, myself, nullptr, checkType(args[i])));
+			else
+				std::cout << "exception: invalid number or player tiles \n";
+		}
+
+	}
+
+	std::vector<Tile*> tiles;
+	std::vector<Leader*> leaders;
 
 private:
 	Board* board;
@@ -445,6 +457,17 @@ public:
 				break;
 
 			case refresh:
+				if (arguments.size() != 4)
+				{
+					std::cout << "invalid command \n";
+				};
+
+				if ((current_player == std::stoi(arguments[1])) && (6 - (players[current_player]->tiles.size()) < (arguments.size()-2)))
+				{
+					players[current_player]->refreshTiles(arguments);
+				}
+				else
+					std::cout << "exception: invalid number or player tiles \n";
 				break;
 
 			case treasure:
