@@ -30,6 +30,7 @@ class Token;
 class Tile;
 class Game;
 class Board;
+class Cell;
 
 
 struct Position
@@ -167,7 +168,7 @@ bool Board::placeTile(Tile* tile, std::vector<std::string> args)
 	}
 
 	//Check if that cell is alredy ocupied.
-	if (!cell->isEmpty() && !cell->hasTemple())
+	if (!cell->isEmpty())
 	{
 		std::cout << "exception: board space is already occupied \n";
 		cell = nullptr;
