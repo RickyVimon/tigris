@@ -28,11 +28,8 @@
 class Board;
 class Player;
 class Token;
-class Tile;
-class Leader;
 class Cell;
-class Kingdom;
-class Region;
+class Area;
 
 
 
@@ -121,34 +118,19 @@ private:
 	Token* token = nullptr;
 };
 
-void Cell::setToken(Token* t)
-{
-	token = t;
-};
 
-class Kingdom
+class Area
 {
 public:
-	Kingdom(const std::vector<Tile*> &k_t, Leader* lead) : kingdom_tiles(k_t)
+	Area(const std::vector<Token*> &a_t) : area_tokens(a_t) {}
+	Area(Token* tok)
 	{
-		leaders.emplace_back(lead);
+		area_tokens.push_back(tok);
 	}
-public:
-	std::vector<Tile*> kingdom_tiles;
-	std::vector<Leader*> leaders;
-};
-
-class Region
-{
-public:
-	Region(const std::vector<Tile*> &r_t) : region_tiles(r_t) {}
-	Region(Tile* tile) 
-	{
-		region_tiles.emplace_back(tile);
-	}
+	bool isKingdom();
 
 public:
-	std::vector<Tile*> region_tiles;
+	std::vector<Token*> area_tokens;
 };
 
 
@@ -165,20 +147,18 @@ public:
 	};
 
 	bool hasCellTemple(const Position &pos);
-	Region* getRegion(const Position &pos);
-	bool hasCellRegion(const Position & pos);
+	Area* getArea(const Position &pos);
+	bool hasCellArea(const Position & pos);
+	void checkAreas(std::vector<Token*> adjacent_tokens, Token * token, bool isLeader);
 	bool isCellEmpty(const Position &pos);
 	bool placeToken(Token* tile, std::vector<std::string> args, bool isLeader);
-	std::vector<Region*> getAdjacentRegions(const Position &p);
-	void checkKingdoms(std::vector<Token*> adjacent_tokens, Token* token, bool isLeader);
+	std::vector<Area*> getAdjacentAreas(const Position &p);
 
 	void RegionCatastrophe(const Position & pos);
-
 	bool isPositionCorrect(const Position & pos);
 
-	void newRegion(const std::vector<Tile*> &tiles);
-	void newRegion(const Tile & tile);
-	void newRegion(Tile* tile);
+	void newArea(const std::vector<Token*> &tokens);
+	void newArea(Token* token);
 
 	std::vector<Token*> getAdjacentTokens(Token* token, const Position &pos);
 	bool hasAdjacentTemple(const Position &pos);
@@ -204,8 +184,7 @@ public:
 	Cell *cells[BOARD_WIDTH][BOARD_LENGTH];
 
 
-	std::vector<Region*> regions;
-	std::vector<Kingdom*> kingdoms;
+	std::vector<Token*> areas;
 
 };
 
@@ -228,15 +207,15 @@ public:
 
 	Position getPosition();
 	void setCell(Cell*c);
+	void checkAdjacentAreas();
 	std::vector<Token*> getCollidingTokens(Token* token);
+	std::vector<Token*> getCollidingTokens(std::vector<Token*> tile_vector);
 	bool collidesWith(Token * token);
-	void setRegion(Region* r) { if (r != nullptr) region = r; };
-	void setKingdom(Kingdom* k) { if (k != nullptr) kingdom = k; };
-	Kingdom* getKingdom() { return kingdom; };
-	Region* getRegion() { return region; };
+	void setArea(Area* a) { if (a != nullptr) area = a; };
+	Area* getArea() { return area; };
 
-	bool isRegion() { if (region == nullptr) return false; else return true; };
-	bool isKingdom() { if (kingdom == nullptr) return false; else return true; };
+	bool isKingdom();
+	bool isLeader() { return isleader; }
 
 public:
 	Player* owner;
@@ -245,30 +224,8 @@ protected:
 	Cell* cell;
 	Type type;
 	Board* board;
-	Region* region = nullptr;
-	Kingdom* kingdom = nullptr;
+	Area* area = nullptr;
 	bool isleader;
-};
-
-
-class Tile : public Token
-{
-	using Token::Token;
-
-public:
-
-	void checkAdjacentKingdomsOrRegions();
-
-	std::vector<Tile*> getCollidingTiles(std::vector<Tile*> tile_vector);
-
-};
-
-
-
-class Leader : public Token
-{
-public:
-	using Token::Token;
 };
 
 
@@ -280,10 +237,10 @@ public:
 	Player(Board* b, std::string starting_tiles)
 	{
 		board = b;
-		leaders.emplace_back(new Leader(board, this, nullptr, Type::black, true));
-		leaders.emplace_back(new Leader(board, this, nullptr, Type::red, true));
-		leaders.emplace_back(new Leader(board, this, nullptr, Type::green, true));
-		leaders.emplace_back(new Leader(board, this, nullptr, Type::blue, true));
+		tokens.emplace_back(new Token(board, this, nullptr, Type::black, true));
+		tokens.emplace_back(new Token(board, this, nullptr, Type::red, true));
+		tokens.emplace_back(new Token(board, this, nullptr, Type::green, true));
+		tokens.emplace_back(new Token(board, this, nullptr, Type::blue, true));
 
 		setTiles(starting_tiles);
 
@@ -294,6 +251,10 @@ public:
 	};
 
 	void setTiles(std::string token_line);
+
+	void setTokens(std::string token_line);
+
+	bool placeToken(const std::vector<std::string>& args);
 
 	bool placeTile(const std::vector<std::string>& args);
 
@@ -316,8 +277,9 @@ public:
 
 	std::vector<int> getVictoryPoints() { return victory_points; };
 
-	std::vector<Tile*> tiles;
-	std::vector<Leader*> leaders;
+	//std::vector<Tile*> tiles;
+	//std::vector<Leader*> leaders;
+	std::vector<Token*> tokens;
 
 	int getTreasures() { return treasures; };
 
@@ -332,6 +294,78 @@ private:
 
 
 //----------------------------------------------------------------END OF THE HEADER----------------------------------------------------
+int countIslands(int M[][BOARD_WIDTH])
+{
+	// Make a bool array to mark visited cells. 
+	// Initially all cells are unvisited 
+	bool visited[BOARD_LENGTH][BOARD_WIDTH];
+	memset(visited, 0, sizeof(visited));
+
+	// Initialize count as 0 and 
+	// travese through the all cells of 
+	// given matrix 
+	int count = 0;
+	for (int i = 0; i < BOARD_LENGTH; ++i)
+		for (int j = 0; j < BOARD_WIDTH; ++j)
+
+			// If a cell with value 1 is not 
+			if (M[i][j] && !visited[i][j]) {
+				// visited yet, then new island found 
+				// Visit all cells in this island. 
+				DFS(M, i, j, visited);
+
+				// and increment island count 
+				++count;
+			}
+
+	return count;
+}
+
+int isSafe(int M[][BOARD_WIDTH], int length, int width,
+	bool visited[][BOARD_WIDTH])
+{
+	// row number is in range, column 
+	// number is in range and value is 1 
+	// and not yet visited 
+	return (length >= 0) && (length < BOARD_LENGTH) && (width >= 0) && (width < BOARD_WIDTH) && (M[length][width] && !visited[length][width]);
+}
+
+
+void DFS(int M[][BOARD_WIDTH], int length, int width,
+	bool visited[][BOARD_WIDTH])
+{
+	// These arrays are used to get 
+	// row and column numbers of 8 
+	// neighbours of a given cell 
+	static int lengthNbr[] = { -1, 0, 0,  1};
+	static int widthNbr[] = {  0, -1, 1, 0};
+
+	// Mark this cell as visited 
+	visited[length][width] = true;
+
+	// Recur for all connected neighbours 
+	for (int k = 0; k < 4; ++k)
+		if (isSafe(M, length + lengthNbr[k], width + widthNbr[k], visited))
+			DFS(M, length + lengthNbr[k], width + widthNbr[k], visited);
+}
+
+void Cell::setToken(Token* t)
+{
+	token = t;
+};
+
+bool Area::isKingdom()
+{
+	for (unsigned int i = 0; i < area_tokens.size(); ++i)
+	{
+		if (area_tokens[i]->isLeader())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 
 void Player::winPoint(const int &index)
 {
@@ -346,7 +380,7 @@ void Token::setCell(Cell*c)
 }
 
 
-void Tile::checkAdjacentKingdomsOrRegions()
+void Token::checkAdjacentAreas()
 {
 	std::vector<Token*> adjacent_tokens = board->getAdjacentTokens(this, cell->getPosition());
 
@@ -354,47 +388,50 @@ void Tile::checkAdjacentKingdomsOrRegions()
 	{
 	case 0:
 		//New Region
-		board->newRegion(this);
+		board->newArea(this);
 		break;
 
 	case 1:
 		//Join Region or Kingdom
 		if (adjacent_tokens[1]->isKingdom())
 		{
-			kingdom = adjacent_tokens[1]->getKingdom();
-			kingdom->kingdom_tiles.emplace_back(this);
+			area = adjacent_tokens[1]->getArea();
+			area->area_tokens.emplace_back(this);
 
 			//check if this action is rewarded with points
-			for (unsigned int i = 0; i < kingdom->leaders.size(); ++i)
+			for (unsigned int i = 0; i < area->area_tokens.size(); ++i)
 			{
-				if (kingdom->leaders[i]->getType() == Type::black)
+				if (area->area_tokens[i]->isleader)
 				{
-					//Add one victory point for the owner of the king
-					kingdom->leaders[i]->owner->winPoint((const int)Type::black);
-				}
-				else if (kingdom->leaders[i]->getType() == type)
-				{
-					//Add one victory point to the owner of the leader of the same type as the new tile placed
-					kingdom->leaders[i]->owner->winPoint((const int)type);
+					if (area->area_tokens[i]->getType() == Type::black)
+					{
+						//Add one victory point for the owner of the king
+						area->area_tokens[i]->owner->winPoint((const int)Type::black);
+					}
+					else if (area->area_tokens[i]->getType() == type)
+					{
+						//Add one victory point to the owner of the leader of the same type as the new tile placed
+						area->area_tokens[i]->owner->winPoint((const int)type);
+					}
 				}
 			}
 		}
 		else
 		{
-			region = adjacent_tokens[1]->getRegion();
-			region->region_tiles.emplace_back(this);
+			area = adjacent_tokens[1]->getArea();
+			area->area_tokens.emplace_back(this);
 		}
 		break;
 
 	case 2:
-		if (adjacent_tokens[0]->getRegion() != adjacent_tokens[1]->getRegion())
+		if (adjacent_tokens[0]->getArea() != adjacent_tokens[1]->getArea())
 		{
 			//Disvolve into a bigger region
 		
 			
 		}
 		else //Join the kingdom
-			adjacent_tokens[0]->getRegion()->region_tiles.emplace_back(this);
+			adjacent_tokens[0]->getArea()->area_tokens.emplace_back(this);
 		break;
 
 	case 3:
@@ -407,10 +444,7 @@ void Tile::checkAdjacentKingdomsOrRegions()
 	//if(adjacent_tokens.size()  1)
 	for (unsigned int i = 0; i < adjacent_tokens.size(); ++i)
 	{
-		if (adjacent_tokens[i]->isRegion())
-		{
-
-		}
+	
 	}
 
 }
@@ -429,31 +463,18 @@ bool Board::isPositionCorrect(const Position &pos)
 		return false;
 }
 
-void Board::newRegion(const std::vector<Tile*> &tiles)
+void Board::newArea(const std::vector<Token*> &tokens)
 {
-	Region* region = new Region(tiles);
-	regions.emplace_back(region);
-}
-
-void Board::newRegion(Tile* tile)
-{
-	Region* region = new Region(tile);
-	regions.emplace_back(region);
+	Area* area = new Area(tokens);
+	areas.emplace_back(area);
 }
 
 void Board::newArea(Token* token)
 {
-	if (token->isKingdom())
-	{
-		Kingdom* kingdom = new Kingdom(token);
-
-	}
-	else if (token->isRegion())
-	{
-		Region* region = new Region(token);
-		regions.emplace_back(region);
-	}
+	Area* area = new Area(token);
+	areas.emplace_back(area);
 }
+
 
 std::vector<Token*> Board::getAdjacentTokens(Token* token, const Position &pos)
 {
@@ -495,16 +516,16 @@ void Board::solveCatastrophe(const Position &pos)
 			//Need to check first if that token is not a leader, a treasure or a monument.
 			if (token_to_destroy->isKingdom())
 				//kingdomCatastrophe(pos);
-				Kingdom* k = token_to_destroy->getKingdom();
-			else if (token_to_destroy->isRegion())
+				Area* a = token_to_destroy->getArea();
+			else if (!token_to_destroy->isKingdom())
 			{
 				//RegionCatastrophe(pos)
-				Region* r = token_to_destroy->getRegion();
-				std::vector<Region*> pre_regions;
-				for (unsigned int i = 0; i < r->region_tiles.size(); ++i)
-				{
+				Area* r = token_to_destroy->getArea();
+				std::vector<Area*> pre_areas;
+				for (unsigned int i = 0; i < r->area_tokens.size(); ++i)
+				{   //////////////////////////////////DELETE THIS APPOACH
 					//r->region_tiles[i]->getCollidingTiles(r->region_tiles);
-					newRegion(r->region_tiles[i]->getCollidingTiles(r->region_tiles));
+					newArea(r->area_tokens[i]->getCollidingTokens(r->area_tokens));
 					fuzeRegions(pos);
 				}
 			}
@@ -529,17 +550,17 @@ void Board::fuzeRegions(const Position &pos)
 	std::vector<Token*> colliding_tokens = getAdjacentTokens(tok, pos);
 	for (unsigned int i = 0; i > colliding_tokens.size(); ++i)
 	{
-		if (colliding_tokens[i]->getRegion() != tok->getRegion()) 
+		if (colliding_tokens[i]->getArea() != tok->getArea()) 
 		{
 			//isolated cell: create new Region
-			newRegion((Tile*)colliding_tokens[i]);
+			newArea(colliding_tokens[i]);
 		}
 	}
 }
 
-std::vector<Tile*> Tile::getCollidingTiles(std::vector<Tile*> tile_vector)
+std::vector<Token*> Token::getCollidingTokens(std::vector<Token*> tile_vector)
 {
-	std::vector<Tile*> colliding_tiles;
+	std::vector<Token*> colliding_tiles;
 	for (unsigned int i = 0; i < tile_vector.size(); ++i)
 	{
 		if (this->collidesWith(tile_vector[i]))
@@ -550,11 +571,16 @@ std::vector<Tile*> Tile::getCollidingTiles(std::vector<Tile*> tile_vector)
 
 bool Token::collidesWith(Token* token)
 {
-	if (abs(this->getPosition().x - token->getPosition.x) == 1 && this->getPosition().y == token->getPosition.y)
+	if (abs(this->getPosition().x - token->getPosition().x) == 1 && this->getPosition().y == token->getPosition().y)
 		return true;
-	if (abs(this->getPosition().y - token->getPosition.y) == 1 && this->getPosition().x == token->getPosition.x)
+	if (abs(this->getPosition().y - token->getPosition().y) == 1 && this->getPosition().x == token->getPosition().x)
 		return true;
 	return false;
+}
+
+bool Token::isKingdom()
+{
+	return area->isKingdom();
 }
 
 bool Board::hasAdjacentTemple(const Position &pos)
@@ -595,47 +621,42 @@ bool Board::hasCellTemple(const Position &pos)
 	return c->hasTemple();
 }
 
-Region* Board::getRegion(const Position &pos)
+Area* Board::getArea(const Position &pos)
 {
-	Region* r = nullptr;
+	Area* a = nullptr;
 	Cell* c = getCell(pos);
 	if (!c->isEmpty())
 	{
 		Token* t = c->getToken();
-		if (t->isRegion())
-		{
-			r = t->getRegion();
-			return r;
-		}
+		a = t->getArea();
 	}
-
-		return r;
+	return a;
 }
 
-bool Board::hasCellRegion(const Position &pos)
+bool Board::hasCellArea(const Position &pos)
 {
 	Cell* c = getCell(pos);
 	Token* t = c->getToken();
-	if (t->isRegion())
+	if (t->getArea() != nullptr)
 		return true;
 	else
 		return false;
 }
 
-void Board::checkKingdoms(std::vector<Token*> adjacent_tokens, Token* token, bool isLeader = false)
+void Board::checkAreas(std::vector<Token*> adjacent_tokens, Token* token, bool isLeader = false)
 {
 
-	std::vector<Kingdom*> kingdoms;
+	std::vector<Area*> areas;
 	for (unsigned int i = 0; i < adjacent_tokens.size(); ++i)
 	{
 		if (adjacent_tokens[i]->isKingdom())
 		{
-			Kingdom* k = adjacent_tokens[i]->getKingdom();
-			kingdoms.emplace_back(k);
+			Area* a = adjacent_tokens[i]->getArea();
+			areas.emplace_back(a);
 		}
 	}
 
-	switch (kingdoms.size())
+	switch (areas.size())
 	{
 	case 0:
 		if (isLeader)
@@ -646,14 +667,10 @@ void Board::checkKingdoms(std::vector<Token*> adjacent_tokens, Token* token, boo
 		break;
 	case 1:
 		//add the tile to the kingdom;
-		token->setKingdom(kingdoms[0]);
+		token->setArea(areas[0]);
 		if (isLeader)
 		{
-			kingdoms[0]->leaders.emplace_back((Leader*)token);
-		}
-		else
-		{
-			kingdoms[0]->kingdom_tiles.emplace_back((Tile*)token);
+			areas[0]->area_tokens.emplace_back(token);
 		}
 		break;
 
@@ -709,9 +726,9 @@ bool Board::placeToken(Token* token, std::vector<std::string> args, bool isLeade
 		{
 			//checkkingdoms
 
-			std::vector<Region*> regions = getAdjacentRegions(p);
+			std::vector<Area*> areas = getAdjacentAreas(p);
 
-			switch (regions.size())
+			switch (areas.size())
 			{
 				//TODO
 			}
@@ -723,48 +740,48 @@ bool Board::placeToken(Token* token, std::vector<std::string> args, bool isLeade
 	return true;
 }
 
-std::vector<Region*> Board::getAdjacentRegions(const Position &pos)
+std::vector<Area*> Board::getAdjacentAreas(const Position &pos)
 {
-	Region* new_region;
-	std::vector<Region*> regions;
+	Area* new_area;
+	std::vector<Area*> areas;
 
 	if (pos.x + 1 <= BOARD_WIDTH)
 	{
-		new_region = getRegion(pos);
-		if (new_region != nullptr)
-			regions.emplace_back(new_region);
+		new_area = getArea(pos);
+		if (new_area != nullptr)
+			areas.emplace_back(new_area);
 	}
 	if (pos.x - 1 >= 0)
 	{
-		new_region = getRegion(pos);
-		if (new_region != nullptr)
-			regions.emplace_back(new_region);
+		new_area = getArea(pos);
+		if (new_area != nullptr)
+			areas.emplace_back(new_area);
 	}
 	if (pos.y + 1 <= BOARD_LENGTH)
 	{
-		new_region = getRegion(pos);
-		if (new_region != nullptr)
-			regions.emplace_back(new_region);
+		new_area = getArea(pos);
+		if (new_area != nullptr)
+			areas.emplace_back(new_area);
 	}
 	if (pos.y - 1 >= 0)
 	{
-		new_region = getRegion(pos);
-		if (new_region != nullptr)
-			regions.emplace_back(new_region);
+		new_area = getArea(pos);
+		if (new_area != nullptr)
+			areas.emplace_back(new_area);
 	}
-	return regions;
+	return areas;
 }
 
-void Player::setTiles(std::string token_line)
+void Player::setTokens(std::string token_line)
 {
 	size_t pos = 0;
 	std::string tile_type;
 	while ((pos = token_line.find(" ")) != std::string::npos) {
 		tile_type = token_line.substr(0, pos);
-		tiles.emplace_back(new Tile(board, this, nullptr, tile_type));
+		tokens.emplace_back(new Token(board, this, nullptr, tile_type));
 		token_line.erase(0, pos + 1);
 	}
-	tiles.emplace_back(new Tile(board, this, nullptr, tile_type));
+	tokens.emplace_back(new Token(board, this, nullptr, tile_type));
 
 };
 
@@ -776,13 +793,13 @@ bool Player::placeTile(const std::vector<std::string>& args)
 		return false;
 	};
 
-	for (unsigned int i = 0; i < tiles.size(); ++i)
+	for (unsigned int i = 0; i < tokens.size(); ++i)
 	{
-		if (tiles[i]->getType() == checkType(args[1]))
+		if (tokens[i]->getType() == checkType(args[1]))
 		{
-			if (board->placeToken(tiles[i], args))
+			if (board->placeToken(tokens[i], args))
 			{
-				tiles.erase(tiles.begin() + i);
+				tokens.erase(tokens.begin() + i);
 				return true;;
 			}
 			else
@@ -802,16 +819,16 @@ bool Player::placeLeader(const std::vector<std::string>& args)
 	};
 
 	//check if the tile is on the board or at player's hand.
-	for (unsigned int i = 0; i < leaders.size(); ++i)
+	for (unsigned int i = 0; i < tokens.size(); ++i)
 	{
-		if (leaders[i]->getType() == checkType(args[1]))
+		if (tokens[i]->getType() == checkType(args[1]))
 		{
-			Position pos = leaders[i]->getPosition();
+			Position pos = tokens[i]->getPosition();
 			if (pos.x != -1)
 			{
 				//leader is on the hand
 				//placeLeader
-				if (board->placeToken(leaders[i], args, true))
+				if (board->placeToken(tokens[i], args, true))
 				{
 					return true;;
 				}
@@ -835,7 +852,7 @@ void Player::refreshTiles(std::vector<std::string> args)
 	for (unsigned int i = 2; i < args.size(); ++i)
 	{
 		if (checkType(args[i]) != Type::invalid)
-			tiles.emplace_back(new Tile(board, this, nullptr, checkType(args[i])));
+			tokens.emplace_back(new Token(board, this, nullptr, checkType(args[i])));
 		else
 			std::cout << "exception: invalid number or player tiles \n";
 	}
@@ -868,7 +885,7 @@ void Board::init()
 			cells[j][i] = c;
 			if (c->hasTemple())
 			{
-				c->setToken(new Tile(this, p, c, Type::red));
+				c->setToken(new Token(this, p, c, Type::red));
 			}
 			++count;
 		}
@@ -981,7 +998,7 @@ public:
 					std::cout << "invalid command \n";
 				};
 
-				if ((current_player == std::stoi(arguments[1])) && (6 - (players[current_player]->tiles.size()) < (arguments.size()-2)))
+				if ((current_player == std::stoi(arguments[1])) && (6 - (players[current_player]->tokens.size()) < (arguments.size()-2)))
 				{
 					players[current_player]->refreshTiles(arguments);
 				}
@@ -1083,3 +1100,4 @@ int main()
 
 	return 0;
 }
+
