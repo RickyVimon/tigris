@@ -113,6 +113,7 @@ public:
 
 	void setToken(Token* t);
 	Token* getToken() { return token; };
+	void setTypeCatastrophe() { type = CellType::CATASTROPHE; }
 
 private:
 	Position pos;
@@ -171,11 +172,19 @@ public:
 	std::vector<Region*> getAdjacentRegions(const Position &p);
 	void checkKingdoms(std::vector<Token*> adjacent_tokens, Token* token, bool isLeader);
 
+	void RegionCatastrophe(const Position & pos);
+
+	bool isPositionCorrect(const Position & pos);
+
 	void newRegion(const std::vector<Tile*> &tiles);
+	void newRegion(const Tile & tile);
 	void newRegion(Tile* tile);
 
 	std::vector<Token*> getAdjacentTokens(Token* token, const Position &pos);
 	bool hasAdjacentTemple(const Position &pos);
+	void solveCatastrophe(const Position &pos);
+
+	void fuzeRegions(const Position &pos);
 	
 public:
 	std::vector<int> init_board
@@ -205,7 +214,7 @@ class Token
 {
 
 public:
-	Token(Board* b, Player* p, Cell* c, Type t) : board(b), owner(p), cell(c), type(t) {}
+	Token(Board* b, Player* p, Cell* c, Type t, bool il = false) : board(b), owner(p), cell(c), type(t), isleader(il){}
 
 	Token(Board* b, Player* p, Cell* c, std::string t)
 	{
@@ -219,6 +228,8 @@ public:
 
 	Position getPosition();
 	void setCell(Cell*c);
+	std::vector<Token*> getCollidingTokens(Token* token);
+	bool collidesWith(Token * token);
 	void setRegion(Region* r) { if (r != nullptr) region = r; };
 	void setKingdom(Kingdom* k) { if (k != nullptr) kingdom = k; };
 	Kingdom* getKingdom() { return kingdom; };
@@ -236,6 +247,7 @@ protected:
 	Board* board;
 	Region* region = nullptr;
 	Kingdom* kingdom = nullptr;
+	bool isleader;
 };
 
 
@@ -246,6 +258,8 @@ class Tile : public Token
 public:
 
 	void checkAdjacentKingdomsOrRegions();
+
+	std::vector<Tile*> getCollidingTiles(std::vector<Tile*> tile_vector);
 
 };
 
@@ -266,10 +280,10 @@ public:
 	Player(Board* b, std::string starting_tiles)
 	{
 		board = b;
-		leaders.emplace_back(new Leader(board, this, nullptr, Type::black));
-		leaders.emplace_back(new Leader(board, this, nullptr, Type::red));
-		leaders.emplace_back(new Leader(board, this, nullptr, Type::green));
-		leaders.emplace_back(new Leader(board, this, nullptr, Type::blue));
+		leaders.emplace_back(new Leader(board, this, nullptr, Type::black, true));
+		leaders.emplace_back(new Leader(board, this, nullptr, Type::red, true));
+		leaders.emplace_back(new Leader(board, this, nullptr, Type::green, true));
+		leaders.emplace_back(new Leader(board, this, nullptr, Type::blue, true));
 
 		setTiles(starting_tiles);
 
@@ -321,7 +335,7 @@ private:
 
 void Player::winPoint(const int &index)
 {
-	if(index >= 0 && index < victory_points.size())
+	if((unsigned int)index >= 0 && index < victory_points.size())
 	++victory_points[index];
 }
 
@@ -331,19 +345,6 @@ void Token::setCell(Cell*c)
 	
 }
 
-
-/*
-void Leader::checkAdjacentKingdomsOrRegions()
-{
-	std::vector<Token*> adjacent_tokens = board->getAdjacentTokens(this, cell->getPosition());
-
-	for(unsigned int i = 0; i < adjacent_tokens.size();++i)
-	{
-		if(adjacent_tokens[i]->isRegion())
-	}
-	
-}
-*/
 
 void Tile::checkAdjacentKingdomsOrRegions()
 {
@@ -373,7 +374,8 @@ void Tile::checkAdjacentKingdomsOrRegions()
 				}
 				else if (kingdom->leaders[i]->getType() == type)
 				{
-					owner->winPoint((const int)type);
+					//Add one victory point to the owner of the leader of the same type as the new tile placed
+					kingdom->leaders[i]->owner->winPoint((const int)type);
 				}
 			}
 		}
@@ -388,6 +390,8 @@ void Tile::checkAdjacentKingdomsOrRegions()
 		if (adjacent_tokens[0]->getRegion() != adjacent_tokens[1]->getRegion())
 		{
 			//Disvolve into a bigger region
+		
+			
 		}
 		else //Join the kingdom
 			adjacent_tokens[0]->getRegion()->region_tiles.emplace_back(this);
@@ -411,6 +415,20 @@ void Tile::checkAdjacentKingdomsOrRegions()
 
 }
 
+void Board::RegionCatastrophe(const Position &pos)
+{
+	Cell* c = getCell(pos);
+	//Region* r 
+}
+
+bool Board::isPositionCorrect(const Position &pos)
+{
+	if (pos.x >= 0 && pos.x <= BOARD_WIDTH && pos.y >= 0 && pos.y <= BOARD_LENGTH)
+		return true;
+	else
+		return false;
+}
+
 void Board::newRegion(const std::vector<Tile*> &tiles)
 {
 	Region* region = new Region(tiles);
@@ -421,6 +439,20 @@ void Board::newRegion(Tile* tile)
 {
 	Region* region = new Region(tile);
 	regions.emplace_back(region);
+}
+
+void Board::newArea(Token* token)
+{
+	if (token->isKingdom())
+	{
+		Kingdom* kingdom = new Kingdom(token);
+
+	}
+	else if (token->isRegion())
+	{
+		Region* region = new Region(token);
+		regions.emplace_back(region);
+	}
 }
 
 std::vector<Token*> Board::getAdjacentTokens(Token* token, const Position &pos)
@@ -450,6 +482,79 @@ std::vector<Token*> Board::getAdjacentTokens(Token* token, const Position &pos)
 			adjacent_tokens.emplace_back(c->getToken());
 	}
 	return adjacent_tokens;
+}
+
+void Board::solveCatastrophe(const Position &pos)
+{
+	if (isPositionCorrect(pos))
+	{
+		Cell* cell = getCell(pos);
+		if (!cell->isEmpty())
+		{
+			Token* token_to_destroy = cell->getToken();
+			//Need to check first if that token is not a leader, a treasure or a monument.
+			if (token_to_destroy->isKingdom())
+				//kingdomCatastrophe(pos);
+				Kingdom* k = token_to_destroy->getKingdom();
+			else if (token_to_destroy->isRegion())
+			{
+				//RegionCatastrophe(pos)
+				Region* r = token_to_destroy->getRegion();
+				std::vector<Region*> pre_regions;
+				for (unsigned int i = 0; i < r->region_tiles.size(); ++i)
+				{
+					//r->region_tiles[i]->getCollidingTiles(r->region_tiles);
+					newRegion(r->region_tiles[i]->getCollidingTiles(r->region_tiles));
+					fuzeRegions(pos);
+				}
+			}
+			token_to_destroy->~Token();
+		}
+		else
+			cell->setTypeCatastrophe();
+
+	}
+
+}
+
+void Board::fuzeRegions(const Position &pos)
+{
+	if (!isPositionCorrect(pos))
+	{
+		return;
+	}
+
+	Cell* c = getCell(pos);
+	Token* tok = c->getToken();
+	std::vector<Token*> colliding_tokens = getAdjacentTokens(tok, pos);
+	for (unsigned int i = 0; i > colliding_tokens.size(); ++i)
+	{
+		if (colliding_tokens[i]->getRegion() != tok->getRegion()) 
+		{
+			//isolated cell: create new Region
+			newRegion((Tile*)colliding_tokens[i]);
+		}
+	}
+}
+
+std::vector<Tile*> Tile::getCollidingTiles(std::vector<Tile*> tile_vector)
+{
+	std::vector<Tile*> colliding_tiles;
+	for (unsigned int i = 0; i < tile_vector.size(); ++i)
+	{
+		if (this->collidesWith(tile_vector[i]))
+			colliding_tiles.emplace_back(tile_vector[i]);
+	}
+	return colliding_tiles;
+}
+
+bool Token::collidesWith(Token* token)
+{
+	if (abs(this->getPosition().x - token->getPosition.x) == 1 && this->getPosition().y == token->getPosition.y)
+		return true;
+	if (abs(this->getPosition().y - token->getPosition.y) == 1 && this->getPosition().x == token->getPosition.x)
+		return true;
+	return false;
 }
 
 bool Board::hasAdjacentTemple(const Position &pos)
