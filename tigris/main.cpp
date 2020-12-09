@@ -149,15 +149,16 @@ public:
 	bool hasCellTemple(const Position &pos);
 	Area* getArea(const Position &pos);
 	bool hasCellArea(const Position & pos);
-	void checkAreas(std::vector<Token*> adjacent_tokens, Token * token, bool isLeader);
 	bool isCellEmpty(const Position &pos);
-	bool placeToken(Token* tile, std::vector<std::string> args, bool isLeader);
+	bool placeToken(Token* tile, std::vector<std::string> args);
 
 	void dissolveArea(const Position &pos);
 
 	void findIsland(Token * current_token, std::vector<Token*> island_tokens, std::vector<Token*> pool);
 
-	void checkConflicts(Token* incoming_token, const Position &pos);
+	bool checkRevolt(Token* leader_token);
+
+	bool checkWar(Token* tile_token);
 
 	bool isPositionCorrect(const Position & pos);
 
@@ -372,29 +373,41 @@ void Token::setCell(Cell*c)
 	
 }
 
-void Board::checkConflicts(Token* incoming_token, const Position &pos)
+bool Board::checkRevolt(Token* leader_token)
 {
-	if (isPositionCorrect(pos))
+	std::vector<Area*> adjacent_areas = getAdjacentAreas(leader_token->getPosition());
+	int coliding_kingdoms = 0;
+	int last_index_kingdom;
+	for (unsigned int i = 0; i < adjacent_areas.size(); ++i)
 	{
-		std::vector<Area*> adjacent_areas = getAdjacentAreas(pos);
-		int kingdoms_counter = 0;
-		for (unsigned int i = 0; i < adjacent_areas.size(); ++i)
-		{
-			if (adjacent_areas[i]->isKingdom())
-				++kingdoms_counter;
-		}
-		if (kingdoms_counter < 2 && adjacent_areas.size() > 1)
-		{
-			fuzeAreas(adjacent_areas);
-		}
-		else
-		{
-			if (kingdoms_counter > 2 && incoming_token->isLeader())
-				std::cout << "exception: cannot place a leader that would unite two kingdoms";
-			else
-				fuzeAreas(adjacent_areas);
-		}
+		adjacent_areas[i]->isKingdom();
+		++coliding_kingdoms;
+		last_index_kingdom = i;
 	}
+	if (coliding_kingdoms > 1)
+	{
+		std::cout << "exception: cannot place a leader that would unite two kingdoms";
+		return false;
+	}
+	if (coliding_kingdoms == 1)
+	{
+		for (unsigned int i = 0; i < adjacent_areas[last_index_kingdom]->area_tokens.size(); ++i)
+		{
+			if (adjacent_areas[last_index_kingdom]->area_tokens[i]->getType() == leader_token->getType())
+				return true;
+		}
+		//Join kingdom
+		adjacent_areas[last_index_kingdom]->area_tokens.emplace_back(leader_token);
+		leader_token->setArea(adjacent_areas[last_index_kingdom]);
+	}
+		//unite regions to the kingdom if any
+		fuzeAreas(adjacent_areas);
+		return false;
+}
+
+bool Board::checkWar(Token* incoming_tile)
+{
+	return true;
 }
 
 /*
@@ -621,44 +634,8 @@ bool Board::hasCellArea(const Position &pos)
 		return false;
 }
 
-void Board::checkAreas(std::vector<Token*> adjacent_tokens, Token* token, bool isLeader = false)
-{
 
-	std::vector<Area*> areas;
-	for (unsigned int i = 0; i < adjacent_tokens.size(); ++i)
-	{
-		Area* adjancent_area = adjacent_tokens[i]->getArea();
-		areas.emplace_back(adjancent_area);
-	}
-
-	switch (areas.size())
-	{
-	case 0:
-		newArea(token);
-		token->setArea(areas[areas.size() + 1]);
-		break;
-	case 1:
-		//add the tile to the kingdom;
-		token->setArea(areas[0]);
-		if (isLeader)
-		{
-			areas[0]->area_tokens.emplace_back(token);
-		}
-		break;
-
-	case 2:
-		//war
-		//conflict
-		break;
-	default:
-		std::cout << "exception: cannot place a tile which could unite 3 or more kingdoms. \n";
-		break;
-	}
-
-}
-
-
-bool Board::placeToken(Token* token, std::vector<std::string> args, bool isLeader = false)
+bool Board::placeToken(Token* token, std::vector<std::string> args)
 {
 	//Check if position is correct within the board dimensions.
 	Position p;
@@ -688,24 +665,12 @@ bool Board::placeToken(Token* token, std::vector<std::string> args, bool isLeade
 	}
 
 	//Leaders can only be placed adjacent to a temple
-	if (isLeader)
+	if (!hasAdjacentTemple(p) && token->isLeader())
 	{
-		if (!hasAdjacentTemple(p))
-		{
-			std::cout << "exception: cannot place a leader in a space without adjacent temple \n";
-		}
-		else //Leaders cannot be placed between two kingdoms
-		{
-			//checkkingdoms
-
-			std::vector<Area*> areas = getAdjacentAreas(p);
-
-			switch (areas.size())
-			{
-				//TODO
-			}
-		}
+		std::cout << "exception: cannot place a leader in a space without adjacent temple \n";
 	}
+
+	//Checkforfusions(token);
 
 	cell->setToken(token);
 	token->setCell(cell);
@@ -800,7 +765,7 @@ bool Player::placeLeader(const std::vector<std::string>& args)
 			{
 				//leader is on the hand
 				//placeLeader
-				if (board->placeToken(tokens[i], args, true))
+				if (board->placeToken(tokens[i], args))
 				{
 					return true;;
 				}
