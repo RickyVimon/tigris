@@ -264,6 +264,7 @@ public:
 	void refreshTiles(std::vector<std::string> args);
 	int getTreasures() { return treasures; };
 	void winPoint(const int &index);
+	void printPoints();
 
 	std::vector<int> getVictoryPoints() { return victory_points; };
 	std::vector<Token*> tokens;
@@ -380,8 +381,13 @@ bool Player::hasActionsLeft()
 
 void Player::winPoint(const int &index)
 {
-	if((unsigned int)index >= 0 && index < victory_points.size())
-	++victory_points[index];
+	if((unsigned int)index > 0 && index <= victory_points.size())
+	++victory_points[index - 1];
+}
+
+void Player::printPoints()
+{
+	std::cout << "victory " << getTreasures() << " (" << victory_points[0] << " " << victory_points[1] << " " << victory_points[2] << " " << victory_points[3] << ")\n";
 }
 
 void Token::setCell(Cell*c)
@@ -434,8 +440,8 @@ bool Board::checkWar(Token* incoming_tile)
 	std::vector<Area*> adj_kingdoms;
 	for (unsigned int i = 0; i < adjacent_areas.size(); ++i)
 	{
-		adjacent_areas[i]->isKingdom();
-		adj_kingdoms.emplace_back(adjacent_areas[i]);
+		if(adjacent_areas[i]->isKingdom())
+			adj_kingdoms.emplace_back(adjacent_areas[i]);
 	}
 	
 	if (adj_kingdoms.size() > 2)
@@ -477,70 +483,6 @@ bool Board::checkWar(Token* incoming_tile)
 	return false;
 }
 
-/*
-void Token::checkAdjacentAreas()
-{
-	std::vector<Token*> adjacent_tokens = board->getAdjacentTokens(cell->getPosition());
-
-	switch (adjacent_tokens.size())
-	{
-	case 0:
-		//New Region
-		board->newArea(this);
-		break;
-
-	case 1:
-		//Join Region or Kingdom
-		if (adjacent_tokens[1]->isKingdom())
-		{
-			area = adjacent_tokens[1]->getArea();
-			area->area_tokens.emplace_back(this);
-
-			//check if this action is rewarded with points
-			for (unsigned int i = 0; i < area->area_tokens.size(); ++i)
-			{
-				if (area->area_tokens[i]->isleader)
-				{
-					if (area->area_tokens[i]->getType() == Type::black)
-					{
-						//Add one victory point for the owner of the king
-						area->area_tokens[i]->owner->winPoint((const int)Type::black);
-					}
-					else if (area->area_tokens[i]->getType() == type)
-					{
-						//Add one victory point to the owner of the leader of the same type as the new tile placed
-						area->area_tokens[i]->owner->winPoint((const int)type);
-					}
-				}
-			}
-		}
-		else
-		{
-			area = adjacent_tokens[1]->getArea();
-			area->area_tokens.emplace_back(this);
-		}
-		break;
-
-	case 2:
-		if (adjacent_tokens[0]->getArea() != adjacent_tokens[1]->getArea())
-		{
-			//Disvolve into a bigger region
-		
-			
-		}
-		else //Join the kingdom
-			adjacent_tokens[0]->getArea()->area_tokens.emplace_back(this);
-		break;
-
-	case 3:
-		break;
-	case 4:
-		break;
-	default:
-		break;
-	}
-}
-*/
 
 
 bool Board::isPositionCorrect(const Position &pos)
@@ -572,27 +514,39 @@ void Board::newArea(Token* token)
 std::vector<Token*> Board::getAdjacentTokens(const Position &pos)
 {
 	std::vector<Token*> adjacent_tokens;
-	Cell* c = cells[pos.x][pos.y];
+	Cell* c;
 	if (pos.x + 1 <= BOARD_WIDTH)
 	{
-		if (!isCellEmpty(pos))
+		Position temp_pos = pos;
+		temp_pos.x += 1;
+		c = cells[temp_pos.x][temp_pos.y];
+		if (!isCellEmpty(temp_pos))
 			adjacent_tokens.emplace_back(c->getToken());
 
 	}
 	if (pos.x - 1 >= 0)
 	{
-		if (!isCellEmpty(pos))
+		Position temp_pos = pos;
+		temp_pos.x -= 1;
+		c = cells[temp_pos.x][temp_pos.y];
+		if (!isCellEmpty(temp_pos))
 			adjacent_tokens.emplace_back(c->getToken());
 
 	}
 	if (pos.y + 1 <= BOARD_LENGTH)
 	{
-		if (!isCellEmpty(pos))
+		Position temp_pos = pos;
+		temp_pos.y += 1;
+		c = cells[temp_pos.x][temp_pos.y];
+		if (!isCellEmpty(temp_pos))
 			adjacent_tokens.emplace_back(c->getToken());
 	}
 	if (pos.y - 1 >= 0)
 	{
-		if (!isCellEmpty(pos))
+		Position temp_pos = pos;
+		temp_pos.y -= 1;
+		c = cells[temp_pos.x][temp_pos.y];
+		if (!isCellEmpty(temp_pos))
 			adjacent_tokens.emplace_back(c->getToken());
 	}
 	return adjacent_tokens;
@@ -620,7 +574,7 @@ void Board::fuzeAreas(std::vector<Area*> areas_to_fuze)
 	std::vector<Token*> tokens_to_fuze;
 	for (unsigned int i = 0; i < areas_to_fuze.size(); ++i)
 	{
-		for (unsigned k = 0; i < areas_to_fuze[i]->area_tokens.size(); ++k)
+		for (unsigned k = 0; k < areas_to_fuze[i]->area_tokens.size(); ++k)
 		{
 			tokens_to_fuze.emplace_back(areas_to_fuze[i]->area_tokens[k]);
 		}
@@ -714,19 +668,25 @@ bool Board::placeToken(Token* token, std::vector<std::string> args)
 		return false;
 	}
 
-	//Check if the tile is a farm. Farms can only be places on river tiles.
 	Cell* cell = getCell(p);
-	if ((cell->getType() == CellType::RIVER && args[1] != "farm") || (cell->getType() != CellType::RIVER && args[1] == "farm"))
-	{
-		std::cout << "exception: only farms can be placed in a river tile \n";
-		cell = nullptr;
-		return false;
-	}
 
 	//Check if that cell is alredy ocupied.
 	if (!cell->isEmpty())
 	{
 		std::cout << "exception: board space is already occupied \n";
+		cell = nullptr;
+		return false;
+
+	}
+	//Check if the tile is a farm. Farms can only be places on river tiles.
+	if ((cell->getType() == CellType::RIVER && args[1] != "farm") || (cell->getType() != CellType::RIVER && args[1] == "farm"))
+	{
+		if (token->isLeader())
+		{
+			std::cout << "exception: cannot place a leader in a river\n";
+		}
+		else
+			std::cout << "exception: only farms can be placed in a river tile\n";
 		cell = nullptr;
 		return false;
 	}
@@ -735,12 +695,18 @@ bool Board::placeToken(Token* token, std::vector<std::string> args)
 	if (!hasAdjacentTemple(p) && token->isLeader())
 	{
 		std::cout << "exception: cannot place a leader in a space without adjacent temple \n";
+		return false;
 	}
-
-	//Checkforfusions(token);
 
 	cell->setToken(token);
 	token->setCell(cell);
+	if (token->isLeader())
+	{
+		checkRevolt(token);
+	}
+	else
+		checkWar(token);
+
 	return true;
 }
 
@@ -751,25 +717,33 @@ std::vector<Area*> Board::getAdjacentAreas(const Position &pos)
 
 	if (pos.x + 1 <= BOARD_WIDTH)
 	{
-		new_area = getArea(pos);
+		Position temp_pos = pos;
+		temp_pos.x += 1;
+		new_area = getArea(temp_pos);
 		if (new_area != nullptr)
 			areas.emplace_back(new_area);
 	}
 	if (pos.x - 1 >= 0)
 	{
-		new_area = getArea(pos);
+		Position temp_pos = pos;
+		temp_pos.x -= 1;
+		new_area = getArea(temp_pos);
 		if (new_area != nullptr)
 			areas.emplace_back(new_area);
 	}
 	if (pos.y + 1 <= BOARD_LENGTH)
 	{
-		new_area = getArea(pos);
+		Position temp_pos = pos;
+		temp_pos.y += 1;
+		new_area = getArea(temp_pos);
 		if (new_area != nullptr)
 			areas.emplace_back(new_area);
 	}
 	if (pos.y - 1 >= 0)
 	{
-		new_area = getArea(pos);
+		Position temp_pos = pos;
+		temp_pos.y -= 1;
+		new_area = getArea(temp_pos);
 		if (new_area != nullptr)
 			areas.emplace_back(new_area);
 	}
@@ -818,7 +792,7 @@ bool Player::placeLeader(const std::vector<std::string>& args)
 {
 	if (!existsType(args[1]))
 	{
-		std::cout << "exception: could not parse tyle type \n";
+		std::cout << "exception: could not parse leader type \n";
 		return false;
 	};
 
@@ -830,20 +804,20 @@ bool Player::placeLeader(const std::vector<std::string>& args)
 			Position pos = tokens[i]->getPosition();
 			if (pos.x != -1)
 			{
-				//leader is on the hand
-				//placeLeader
-				if (board->placeToken(tokens[i], args))
-				{
-					return true;;
-				}
-				else
-					return false;
+				board->cells[tokens[i]->getPosition().x][tokens[i]->getPosition().y]->setToken(nullptr);
+				tokens[i]->setCell(nullptr);
+		
+				board->dissolveArea(tokens[i]->getPosition());
+			}
+			//leader on the hand
+			if (board->placeToken(tokens[i], args))
+			{
+				tokens.erase(tokens.begin(), tokens.begin() + i);
+				return true;
 			}
 			else
-			{
-				//Leader is on the board
-				//move Leader
-			}
+				return false;
+
 		}
 
 	};
@@ -853,6 +827,20 @@ bool Player::placeLeader(const std::vector<std::string>& args)
 
 void Player::refreshTiles(std::vector<std::string> args)
 {
+	//count missing tiles
+	int tiles = 0;
+	for (unsigned k = 0; k < tokens.size(); ++k)
+	{
+		if (!tokens[k]->isLeader())
+			++tiles;
+	}
+	if ((6 - tiles) != (args.size() - 2))
+	{
+		std::cout << "exception: invalid number or player tiles \n";
+		return;
+	}
+
+	//get missig tiles;
 	for (unsigned int i = 2; i < args.size(); ++i)
 	{
 		if (checkType(args[i]) != Type::invalid)
@@ -885,11 +873,12 @@ void Board::init()
 	{
 		for (int j = 0; j < BOARD_WIDTH; ++j)
 		{
-			Cell* c = new Cell(i, j, init_board[count]);
+			Cell* c = new Cell(j, i, init_board[count]);
 			cells[j][i] = c;
 			if (c->hasTemple())
 			{
 				c->setToken(new Token(this, p, c, Type::red));
+				newArea(c->getToken());
 			}
 			++count;
 		}
@@ -944,8 +933,6 @@ public:
 
 	void startGame(std::vector<std::string> input_lines)
 	{
-		board = new Board();
-		board->init();
 
 		for(unsigned int i = 0; i < input_lines.size(); ++i)
 		{
@@ -997,17 +984,7 @@ public:
 				break;
 
 			case refresh:
-				if (arguments.size() != 4)
-				{
-					std::cout << "invalid command \n";
-				};
-
-				if ((current_player == std::stoi(arguments[1])) && (6 - (players[current_player]->tokens.size()) < (arguments.size()-2)))
-				{
 					players[current_player]->refreshTiles(arguments);
-				}
-				else
-					std::cout << "exception: invalid number or player tiles \n";
 				break;
 
 			case treasure:
@@ -1033,6 +1010,7 @@ public:
 		static const std::map<std::string, Commands> optionCommands
 		{
 			{ "tile", tile },
+			{ "leader", leader },
 			{ "refresh", refresh },
 			{ "treasure", treasure },
 			{ "catastrophe", catastrophe },
@@ -1059,15 +1037,16 @@ private:
 
 void Game::nextPlayer()
 {
+	for (unsigned int k = 0; k < players.size(); ++k)
+	{
+		players[k]->printPoints();
+	}
+	std::cout << "----\n";
 
 	if ((unsigned int)(current_player + 1) >= players.size())
 	{
 		current_player = 0;
-		for (unsigned int i = 0; i < players.size(); ++i)
-		{
-			std::vector<int> points = players[i]->getVictoryPoints();
-			std::cout << "victory " << players[i]->getTreasures() << " (" << points[0] << " " << points[1] << " " << points[2] << " " << points[3] << ")\n";
-		}
+		
 	}
 	else
 		++current_player;
