@@ -152,7 +152,10 @@ public:
 	void checkAreas(std::vector<Token*> adjacent_tokens, Token * token, bool isLeader);
 	bool isCellEmpty(const Position &pos);
 	bool placeToken(Token* tile, std::vector<std::string> args, bool isLeader);
-	std::vector<Area*> getAdjacentAreas(const Position &p);
+
+	void dissolveArea(const Position &pos, Area* area);
+
+	std::vector<Token*> findIsland(Token * tok);
 
 	void RegionCatastrophe(const Position & pos);
 	bool isPositionCorrect(const Position & pos);
@@ -160,7 +163,8 @@ public:
 	void newArea(const std::vector<Token*> &tokens);
 	void newArea(Token* token);
 
-	std::vector<Token*> getAdjacentTokens(Token* token, const Position &pos);
+	std::vector<Area*> getAdjacentAreas(const Position &p);
+	std::vector<Token*> getAdjacentTokens(const Position &pos);
 	bool hasAdjacentTemple(const Position &pos);
 	void solveCatastrophe(const Position &pos);
 
@@ -181,10 +185,10 @@ public:
 		0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2,
 		0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 2, 0, 1, 0, 0, 0
 	};
-	Cell *cells[BOARD_WIDTH][BOARD_LENGTH];
 
 
-	std::vector<Token*> areas;
+	Cell* cells[BOARD_WIDTH][BOARD_LENGTH];
+	std::vector<Area*> areas;
 
 };
 
@@ -242,15 +246,13 @@ public:
 		tokens.emplace_back(new Token(board, this, nullptr, Type::green, true));
 		tokens.emplace_back(new Token(board, this, nullptr, Type::blue, true));
 
-		setTiles(starting_tiles);
+		setTokens(starting_tiles);
 
 		victory_points.emplace_back(0);
 		victory_points.emplace_back(0);
 		victory_points.emplace_back(0);
 		victory_points.emplace_back(0);
 	};
-
-	void setTiles(std::string token_line);
 
 	void setTokens(std::string token_line);
 
@@ -294,60 +296,30 @@ private:
 
 
 //----------------------------------------------------------------END OF THE HEADER----------------------------------------------------
-int countIslands(int M[][BOARD_WIDTH])
+void Board::dissolveArea(const Position &pos, Area* area)
 {
-	// Make a bool array to mark visited cells. 
-	// Initially all cells are unvisited 
-	bool visited[BOARD_LENGTH][BOARD_WIDTH];
-	memset(visited, 0, sizeof(visited));
+	std::vector<Token*> colliding_tokens = getAdjacentTokens(pos);
 
-	// Initialize count as 0 and 
-	// travese through the all cells of 
-	// given matrix 
-	int count = 0;
-	for (int i = 0; i < BOARD_LENGTH; ++i)
-		for (int j = 0; j < BOARD_WIDTH; ++j)
-
-			// If a cell with value 1 is not 
-			if (M[i][j] && !visited[i][j]) {
-				// visited yet, then new island found 
-				// Visit all cells in this island. 
-				DFS(M, i, j, visited);
-
-				// and increment island count 
-				++count;
-			}
-
-	return count;
+	for (unsigned int i = 0; i < colliding_tokens.size(); ++i)
+	{
+		std::vector<Token*> island_tokens = findIsland(colliding_tokens[i]);
+		newArea(island_tokens);
+		//update area to all tokens
+		for (unsigned int k = 0; k < island_tokens.size(); ++k)
+		{
+			island_tokens[k]->setArea(areas[areas.size() - 1]);
+		}
+		
+	}
 }
 
-int isSafe(int M[][BOARD_WIDTH], int length, int width,
-	bool visited[][BOARD_WIDTH])
+std::vector<Token*> Board::findIsland(Token* tok)
 {
-	// row number is in range, column 
-	// number is in range and value is 1 
-	// and not yet visited 
-	return (length >= 0) && (length < BOARD_LENGTH) && (width >= 0) && (width < BOARD_WIDTH) && (M[length][width] && !visited[length][width]);
+	std::vector<Token*> island_tokens;
+
+	return island_tokens;
 }
 
-
-void DFS(int M[][BOARD_WIDTH], int length, int width,
-	bool visited[][BOARD_WIDTH])
-{
-	// These arrays are used to get 
-	// row and column numbers of 8 
-	// neighbours of a given cell 
-	static int lengthNbr[] = { -1, 0, 0,  1};
-	static int widthNbr[] = {  0, -1, 1, 0};
-
-	// Mark this cell as visited 
-	visited[length][width] = true;
-
-	// Recur for all connected neighbours 
-	for (int k = 0; k < 4; ++k)
-		if (isSafe(M, length + lengthNbr[k], width + widthNbr[k], visited))
-			DFS(M, length + lengthNbr[k], width + widthNbr[k], visited);
-}
 
 void Cell::setToken(Token* t)
 {
@@ -382,7 +354,7 @@ void Token::setCell(Cell*c)
 
 void Token::checkAdjacentAreas()
 {
-	std::vector<Token*> adjacent_tokens = board->getAdjacentTokens(this, cell->getPosition());
+	std::vector<Token*> adjacent_tokens = board->getAdjacentTokens(cell->getPosition());
 
 	switch (adjacent_tokens.size())
 	{
@@ -476,10 +448,10 @@ void Board::newArea(Token* token)
 }
 
 
-std::vector<Token*> Board::getAdjacentTokens(Token* token, const Position &pos)
+std::vector<Token*> Board::getAdjacentTokens(const Position &pos)
 {
 	std::vector<Token*> adjacent_tokens;
-	Cell* c = getCell(pos);
+	Cell* c = cells[pos.x][pos.y];
 	if (pos.x + 1 <= BOARD_WIDTH)
 	{
 		if (!isCellEmpty(pos))
@@ -547,7 +519,7 @@ void Board::fuzeRegions(const Position &pos)
 
 	Cell* c = getCell(pos);
 	Token* tok = c->getToken();
-	std::vector<Token*> colliding_tokens = getAdjacentTokens(tok, pos);
+	std::vector<Token*> colliding_tokens = getAdjacentTokens(pos);
 	for (unsigned int i = 0; i > colliding_tokens.size(); ++i)
 	{
 		if (colliding_tokens[i]->getArea() != tok->getArea()) 
