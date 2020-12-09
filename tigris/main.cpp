@@ -797,7 +797,7 @@ bool Player::placeTile(const std::vector<std::string>& args)
 
 	for (unsigned int i = 0; i < tokens.size(); ++i)
 	{
-		if (tokens[i]->getType() == checkType(args[1]))
+		if (!tokens[i]->isLeader() && tokens[i]->getType() == checkType(args[1]))
 		{
 			if (board->placeToken(tokens[i], args))
 			{
