@@ -155,11 +155,11 @@ public:
 
 	void dissolveArea(const Position &pos);
 
-	void findIsland(Token * current_token, std::vector<Token*> island_tokens, std::vector<Token*> pool);
+	void findIsland(Token * current_token, std::vector<Token*> &island_tokens, std::vector<Token*> &pool);
 
-	bool checkRevolt(Token* leader_token);
+	bool checkRevolt(Token* leader_token, Cell* c);
 
-	bool checkWar(Token* tile_token);
+	bool checkWar(Token* tile_token, Cell* c);
 
 	bool isPositionCorrect(const Position & pos);
 
@@ -286,6 +286,8 @@ void Board::dissolveArea(const Position &pos)
 	{
 		std::vector<Token*> island_tokens, pool;
 		pool = getAdjacentTokens(colliding_tokens[i]->getPosition());
+		pool.insert(pool.begin(), colliding_tokens[i]);
+		//pool.emplace_back(colliding_tokens[i]);
 		while (pool.size() != 0)
 		{
 			findIsland(pool[0], island_tokens, pool);
@@ -303,7 +305,7 @@ void Board::dissolveArea(const Position &pos)
 	}
 }
 
-void Board::findIsland(Token* current_token, std::vector<Token*> island_tokens, std::vector<Token*> pool)
+void Board::findIsland(Token* current_token, std::vector<Token*> &island_tokens, std::vector<Token*> &pool)
 {
 	//send current_token to visited
 	island_tokens.emplace_back(current_token);
@@ -325,8 +327,10 @@ void Board::findIsland(Token* current_token, std::vector<Token*> island_tokens, 
 			continue;
 		}
 		else
+		{
 			//Otherwise just add it to the pool
-			pool.emplace_back(colliding_tokens[i]);
+			pool.insert(pool.begin(), colliding_tokens[i]);
+		}
 	}
 	
 }
@@ -396,9 +400,9 @@ void Token::setCell(Cell*c)
 	
 }
 
-bool Board::checkRevolt(Token* leader_token)
+bool Board::checkRevolt(Token* leader_token, Cell* cell)
 {
-	std::vector<Area*> adjacent_areas = getAdjacentAreas(leader_token->getPosition());
+	std::vector<Area*> adjacent_areas = getAdjacentAreas(cell->getPosition());
 	int coliding_kingdoms = 0;
 	int last_index_kingdom;
 	for (unsigned int i = 0; i < adjacent_areas.size(); ++i)
@@ -409,7 +413,7 @@ bool Board::checkRevolt(Token* leader_token)
 	}
 	if (coliding_kingdoms > 1)
 	{
-		std::cout << "exception: cannot place a leader that would unite two kingdoms";
+		std::cout << "exception: cannot place a leader that would unite two kingdoms\n";
 		return false;
 	}
 	if (coliding_kingdoms == 1)
@@ -423,17 +427,21 @@ bool Board::checkRevolt(Token* leader_token)
 		adjacent_areas[last_index_kingdom]->area_tokens.emplace_back(leader_token);
 		leader_token->setArea(adjacent_areas[last_index_kingdom]);
 	}
-		//unite regions to the kingdom if any
-		fuzeAreas(adjacent_areas);
-		return false;
+	//unite regions to the kingdom if any
+	leader_token->setCell(cell);
+	cell->setToken(leader_token);
+	fuzeAreas(adjacent_areas);
+	return false;
 }
 
-bool Board::checkWar(Token* incoming_tile)
+bool Board::checkWar(Token* incoming_tile, Cell* cell)
 {
-	std::vector<Area*> adjacent_areas = getAdjacentAreas(incoming_tile->getPosition());
+	std::vector<Area*> adjacent_areas = getAdjacentAreas(cell->getPosition());
 	if (adjacent_areas.size() == 0)
 	{
 		newArea(incoming_tile);
+		incoming_tile->setCell(cell);
+		cell->setToken(incoming_tile);
 		return false;
 	}
 
@@ -459,6 +467,8 @@ bool Board::checkWar(Token* incoming_tile)
 		else
 		{
 			fuzeAreas(adj_kingdoms);
+			incoming_tile->setCell(cell);
+			cell->setToken(incoming_tile);
 			return false;
 		}
 	}
@@ -480,6 +490,8 @@ bool Board::checkWar(Token* incoming_tile)
 		incoming_tile->setArea(adj_kingdoms[0]);
 		fuzeAreas(adjacent_areas);
 	}
+	incoming_tile->setCell(cell);
+	cell->setToken(incoming_tile);
 	return false;
 }
 
@@ -698,14 +710,13 @@ bool Board::placeToken(Token* token, std::vector<std::string> args)
 		return false;
 	}
 
-	cell->setToken(token);
-	token->setCell(cell);
+
 	if (token->isLeader())
 	{
-		checkRevolt(token);
+		checkRevolt(token, cell);
 	}
 	else
-		checkWar(token);
+		checkWar(token, cell);
 
 	return true;
 }
@@ -805,14 +816,14 @@ bool Player::placeLeader(const std::vector<std::string>& args)
 			if (pos.x != -1)
 			{
 				board->cells[tokens[i]->getPosition().x][tokens[i]->getPosition().y]->setToken(nullptr);
+
 				tokens[i]->setCell(nullptr);
-		
-				board->dissolveArea(tokens[i]->getPosition());
+				board->dissolveArea(pos);
 			}
 			//leader on the hand
 			if (board->placeToken(tokens[i], args))
 			{
-				tokens.erase(tokens.begin(), tokens.begin() + i);
+				//tokens.erase(std::remove(tokens.begin(), tokens.end(), tokens[i]), tokens.end());
 				return true;
 			}
 			else
