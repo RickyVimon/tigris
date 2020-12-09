@@ -153,14 +153,15 @@ public:
 	bool isCellEmpty(const Position &pos);
 	bool placeToken(Token* tile, std::vector<std::string> args, bool isLeader);
 
-	void dissolveArea(const Position &pos, Area* area);
+	void dissolveArea(const Position &pos);
 
 	void findIsland(Token * current_token, std::vector<Token*> island_tokens, std::vector<Token*> pool);
 
-	void RegionCatastrophe(const Position & pos);
+	void checkConflicts(Token* incoming_token, const Position &pos);
+
 	bool isPositionCorrect(const Position & pos);
 
-	void newArea(const std::vector<Token*> &tokens);
+	void newArea(std::vector<Token*> tokens);
 	void newArea(Token* token);
 
 	std::vector<Area*> getAdjacentAreas(const Position &p);
@@ -168,7 +169,8 @@ public:
 	bool hasAdjacentTemple(const Position &pos);
 	void solveCatastrophe(const Position &pos);
 
-	void fuzeRegions(const Position &pos);
+	void fuzeAreas(std::vector<Area*> areas_to_fuze);
+
 	
 public:
 	std::vector<int> init_board
@@ -211,14 +213,10 @@ public:
 
 	Position getPosition();
 	void setCell(Cell*c);
-	void checkAdjacentAreas();
-	std::vector<Token*> getCollidingTokens(Token* token);
 	std::vector<Token*> getCollidingTokens(std::vector<Token*> tile_vector);
 	bool collidesWith(Token * token);
 	void setArea(Area* a) { if (a != nullptr) area = a; };
 	Area* getArea() { return area; };
-
-	bool isKingdom();
 	bool isLeader() { return isleader; }
 
 public:
@@ -252,40 +250,21 @@ public:
 		victory_points.emplace_back(0);
 		victory_points.emplace_back(0);
 		victory_points.emplace_back(0);
+		resetActions();
 	};
 
 	void setTokens(std::string token_line);
-
-	bool placeToken(const std::vector<std::string>& args);
-
 	bool placeTile(const std::vector<std::string>& args);
-
 	bool placeLeader(const std::vector<std::string>& args);
-
 	void resetActions() { actions = 2; };
 	void useAction() { --actions; };
-	bool hasActionsLeft() {
-		if (actions != 0) {
-			return true;
-		}
-		else
-		{
-			std::cout << "exception: too many turn actions \n";
-			return false;
-		}
-	};
-
+	bool hasActionsLeft();
 	void refreshTiles(std::vector<std::string> args);
+	int getTreasures() { return treasures; };
+	void winPoint(const int &index);
 
 	std::vector<int> getVictoryPoints() { return victory_points; };
-
-	//std::vector<Tile*> tiles;
-	//std::vector<Leader*> leaders;
 	std::vector<Token*> tokens;
-
-	int getTreasures() { return treasures; };
-
-	void winPoint(const int &index);
 
 private:
 	Board* board;
@@ -296,7 +275,7 @@ private:
 
 
 //----------------------------------------------------------------END OF THE HEADER----------------------------------------------------
-void Board::dissolveArea(const Position &pos, Area* area)
+void Board::dissolveArea(const Position &pos)
 {
 	std::vector<Token*> colliding_tokens = getAdjacentTokens(pos);
 
@@ -368,6 +347,18 @@ bool Area::isKingdom()
 	return false;
 }
 
+bool Player::hasActionsLeft() 
+{
+	if (actions > 0) {
+		return true;
+	}
+	else
+	{
+		std::cout << "exception: too many turn actions \n";
+		return false;
+	}
+};
+
 
 void Player::winPoint(const int &index)
 {
@@ -381,7 +372,32 @@ void Token::setCell(Cell*c)
 	
 }
 
+void Board::checkConflicts(Token* incoming_token, const Position &pos)
+{
+	if (isPositionCorrect(pos))
+	{
+		std::vector<Area*> adjacent_areas = getAdjacentAreas(pos);
+		int kingdoms_counter = 0;
+		for (unsigned int i = 0; i < adjacent_areas.size(); ++i)
+		{
+			if (adjacent_areas[i]->isKingdom())
+				++kingdoms_counter;
+		}
+		if (kingdoms_counter < 2 && adjacent_areas.size() > 1)
+		{
+			fuzeAreas(adjacent_areas);
+		}
+		else
+		{
+			if (kingdoms_counter > 2 && incoming_token->isLeader())
+				std::cout << "exception: cannot place a leader that would unite two kingdoms";
+			else
+				fuzeAreas(adjacent_areas);
+		}
+	}
+}
 
+/*
 void Token::checkAdjacentAreas()
 {
 	std::vector<Token*> adjacent_tokens = board->getAdjacentTokens(cell->getPosition());
@@ -443,19 +459,9 @@ void Token::checkAdjacentAreas()
 	default:
 		break;
 	}
-	//if(adjacent_tokens.size()  1)
-	for (unsigned int i = 0; i < adjacent_tokens.size(); ++i)
-	{
-	
-	}
-
 }
+*/
 
-void Board::RegionCatastrophe(const Position &pos)
-{
-	Cell* c = getCell(pos);
-	//Region* r 
-}
 
 bool Board::isPositionCorrect(const Position &pos)
 {
@@ -465,9 +471,13 @@ bool Board::isPositionCorrect(const Position &pos)
 		return false;
 }
 
-void Board::newArea(const std::vector<Token*> &tokens)
+void Board::newArea(std::vector<Token*> tokens)
 {
 	Area* area = new Area(tokens);
+	for (unsigned int i = 0; i < tokens.size(); ++i)
+	{
+		tokens[i]->setArea(area);
+	}
 	areas.emplace_back(area);
 }
 
@@ -475,6 +485,7 @@ void Board::newArea(Token* token)
 {
 	Area* area = new Area(token);
 	areas.emplace_back(area);
+	token->setArea(area);
 }
 
 
@@ -515,49 +526,26 @@ void Board::solveCatastrophe(const Position &pos)
 		if (!cell->isEmpty())
 		{
 			Token* token_to_destroy = cell->getToken();
-			//Need to check first if that token is not a leader, a treasure or a monument.
-			if (token_to_destroy->isKingdom())
-				//kingdomCatastrophe(pos);
-				Area* a = token_to_destroy->getArea();
-			else if (!token_to_destroy->isKingdom())
-			{
-				//RegionCatastrophe(pos)
-				Area* r = token_to_destroy->getArea();
-				std::vector<Area*> pre_areas;
-				for (unsigned int i = 0; i < r->area_tokens.size(); ++i)
-				{   //////////////////////////////////DELETE THIS APPOACH
-					//r->region_tiles[i]->getCollidingTiles(r->region_tiles);
-					newArea(r->area_tokens[i]->getCollidingTokens(r->area_tokens));
-					fuzeRegions(pos);
-				}
-			}
-			token_to_destroy->~Token();
+			delete token_to_destroy;
 		}
 		else
 			cell->setTypeCatastrophe();
 
+		dissolveArea(pos);
 	}
-
 }
 
-void Board::fuzeRegions(const Position &pos)
+void Board::fuzeAreas(std::vector<Area*> areas_to_fuze)
 {
-	if (!isPositionCorrect(pos))
+	std::vector<Token*> tokens_to_fuze;
+	for (unsigned int i = 0; i < areas_to_fuze.size(); ++i)
 	{
-		return;
-	}
-
-	Cell* c = getCell(pos);
-	Token* tok = c->getToken();
-	std::vector<Token*> colliding_tokens = getAdjacentTokens(pos);
-	for (unsigned int i = 0; i > colliding_tokens.size(); ++i)
-	{
-		if (colliding_tokens[i]->getArea() != tok->getArea()) 
+		for (unsigned k = 0; i < areas_to_fuze[i]->area_tokens.size(); ++k)
 		{
-			//isolated cell: create new Region
-			newArea(colliding_tokens[i]);
+			tokens_to_fuze.emplace_back(areas_to_fuze[i]->area_tokens[k]);
 		}
 	}
+	newArea(tokens_to_fuze);
 }
 
 std::vector<Token*> Token::getCollidingTokens(std::vector<Token*> tile_vector)
@@ -580,35 +568,23 @@ bool Token::collidesWith(Token* token)
 	return false;
 }
 
-bool Token::isKingdom()
-{
-	return area->isKingdom();
-}
 
 bool Board::hasAdjacentTemple(const Position &pos)
 {
-	if (pos.x + 1 <= BOARD_WIDTH)
+	if (isPositionCorrect(pos))
 	{
-		if (hasCellTemple(pos))
-			return true;
+		std::vector<Token*> adjacent_tokens = getAdjacentTokens(pos);
+		for (unsigned int i = 0; i < adjacent_tokens.size(); ++i)
+		{
+			if (!adjacent_tokens[i]->isLeader() && adjacent_tokens[i]->getType() == checkType("temple"))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
-	if (pos.x - 1 >= 0)
-	{
-		if (hasCellTemple(pos))
-			return true;
-	}
-	if (pos.y + 1 <= BOARD_LENGTH)
-	{
-		if (hasCellTemple(pos))
-			return true;
-	}
-	if (pos.y - 1 >= 0)
-	{
-		if (hasCellTemple(pos))
-			return true;
-	}
-	return false;
-
+	else
+		return false;
 }
 
 bool Board::isCellEmpty(const Position &pos)
@@ -651,21 +627,15 @@ void Board::checkAreas(std::vector<Token*> adjacent_tokens, Token* token, bool i
 	std::vector<Area*> areas;
 	for (unsigned int i = 0; i < adjacent_tokens.size(); ++i)
 	{
-		if (adjacent_tokens[i]->isKingdom())
-		{
-			Area* a = adjacent_tokens[i]->getArea();
-			areas.emplace_back(a);
-		}
+		Area* adjancent_area = adjacent_tokens[i]->getArea();
+		areas.emplace_back(adjancent_area);
 	}
 
 	switch (areas.size())
 	{
 	case 0:
-		if (isLeader)
-		{
-			//checkAdjacentRegions and join the region
-			//create kingdom.
-		}
+		newArea(token);
+		token->setArea(areas[areas.size() + 1]);
 		break;
 	case 1:
 		//add the tile to the kingdom;
@@ -694,7 +664,7 @@ bool Board::placeToken(Token* token, std::vector<std::string> args, bool isLeade
 	Position p;
 	p.x = std::stoi(args[2]);
 	p.y = std::stoi(args[3]);
-	if (p.x < 0 || p.x > BOARD_WIDTH || p.y < 0 || p.y > BOARD_LENGTH)
+	if (!isPositionCorrect(p))
 	{
 		std::cout << "exception: invalid board space position \n";
 		return false;
