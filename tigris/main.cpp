@@ -128,6 +128,7 @@ public:
 		area_tokens.push_back(tok);
 	}
 	bool isKingdom();
+	Token* getLeader();
 
 public:
 	std::vector<Token*> area_tokens;
@@ -348,6 +349,22 @@ bool Area::isKingdom()
 	return false;
 }
 
+Token * Area::getLeader()
+{
+	Token* leader = nullptr;
+	if(!isKingdom())
+		return leader;
+	else
+	{
+		for (unsigned int i = 0; i < area_tokens.size(); ++i)
+		{
+			if (area_tokens[i]->isLeader())
+				leader = area_tokens[i];
+		}
+	}
+	return leader;
+}
+
 bool Player::hasActionsLeft() 
 {
 	if (actions > 0) {
@@ -407,7 +424,57 @@ bool Board::checkRevolt(Token* leader_token)
 
 bool Board::checkWar(Token* incoming_tile)
 {
-	return true;
+	std::vector<Area*> adjacent_areas = getAdjacentAreas(incoming_tile->getPosition());
+	if (adjacent_areas.size() == 0)
+	{
+		newArea(incoming_tile);
+		return false;
+	}
+
+	std::vector<Area*> adj_kingdoms;
+	for (unsigned int i = 0; i < adjacent_areas.size(); ++i)
+	{
+		adjacent_areas[i]->isKingdom();
+		adj_kingdoms.emplace_back(adjacent_areas[i]);
+	}
+	
+	if (adj_kingdoms.size() > 2)
+	{
+		std::cout << "exception: invalid board space position";
+		return false;
+	}
+	else if (adj_kingdoms.size() == 2)
+	{
+		if (adj_kingdoms[0]->getLeader()->getType() == adj_kingdoms[1]->getLeader()->getType())
+		{
+			//war conflict
+			return true;
+		}
+		else
+		{
+			fuzeAreas(adj_kingdoms);
+			return false;
+		}
+	}
+	else if (adj_kingdoms.size() == 1)
+	{
+		//if there is 1 or less adjacent kingdoms, join kingdom and fuze rest of areas.
+
+		if (adj_kingdoms[0]->getLeader()->getType() == Type::black)
+		{
+			//Add one victory point for the owner of the king
+			adj_kingdoms[0]->getLeader()->owner->winPoint((const int)Type::black);
+		}
+		else if (adj_kingdoms[0]->getLeader()->getType() == incoming_tile->getType())
+		{
+			//Add one victory point to the owner of the leader of the same type as the new tile placed
+			adj_kingdoms[0]->getLeader()->owner->winPoint((const int)incoming_tile->getType());
+		}
+		adj_kingdoms[0]->area_tokens.emplace_back(incoming_tile);
+		incoming_tile->setArea(adj_kingdoms[0]);
+		fuzeAreas(adjacent_areas);
+	}
+	return false;
 }
 
 /*
