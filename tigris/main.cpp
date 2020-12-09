@@ -129,6 +129,7 @@ public:
 	}
 	bool isKingdom();
 	Token* getLeader();
+	void removeTokenFromArea(Token* token);
 
 public:
 	std::vector<Token*> area_tokens;
@@ -223,12 +224,12 @@ public:
 
 public:
 	Player* owner;
+	Area* area = nullptr;
 
 protected:
 	Cell* cell;
 	Type type;
 	Board* board;
-	Area* area = nullptr;
 	bool isleader;
 };
 
@@ -286,8 +287,7 @@ void Board::dissolveArea(const Position &pos)
 	{
 		std::vector<Token*> island_tokens, pool;
 		pool = getAdjacentTokens(colliding_tokens[i]->getPosition());
-		pool.insert(pool.begin(), colliding_tokens[i]);
-		//pool.emplace_back(colliding_tokens[i]);
+		//pool.insert(pool.begin(), colliding_tokens[i]);
 		while (pool.size() != 0)
 		{
 			findIsland(pool[0], island_tokens, pool);
@@ -370,6 +370,12 @@ Token * Area::getLeader()
 	return leader;
 }
 
+void Area::removeTokenFromArea(Token * token)
+{
+	area_tokens.erase(std::remove(area_tokens.begin(), area_tokens.end(), token), area_tokens.end());
+
+}
+
 bool Player::hasActionsLeft() 
 {
 	if (actions > 0) {
@@ -407,9 +413,11 @@ bool Board::checkRevolt(Token* leader_token, Cell* cell)
 	int last_index_kingdom;
 	for (unsigned int i = 0; i < adjacent_areas.size(); ++i)
 	{
-		adjacent_areas[i]->isKingdom();
-		++coliding_kingdoms;
-		last_index_kingdom = i;
+		if (adjacent_areas[i]->isKingdom())
+		{
+			++coliding_kingdoms;
+			last_index_kingdom = i;
+		}
 	}
 	if (coliding_kingdoms > 1)
 	{
@@ -421,17 +429,26 @@ bool Board::checkRevolt(Token* leader_token, Cell* cell)
 		for (unsigned int i = 0; i < adjacent_areas[last_index_kingdom]->area_tokens.size(); ++i)
 		{
 			if (adjacent_areas[last_index_kingdom]->area_tokens[i]->getType() == leader_token->getType())
+			{
+				//call for revolt;
 				return true;
+			}
 		}
 		//Join kingdom
 		adjacent_areas[last_index_kingdom]->area_tokens.emplace_back(leader_token);
 		leader_token->setArea(adjacent_areas[last_index_kingdom]);
 	}
+	else
+	{
+		//create first kingdom
+		newArea(leader_token);
+		adjacent_areas.emplace_back(leader_token->area);
+	}
 	//unite regions to the kingdom if any
+	fuzeAreas(adjacent_areas);
 	leader_token->setCell(cell);
 	cell->setToken(leader_token);
-	fuzeAreas(adjacent_areas);
-	return false;
+	return true;
 }
 
 bool Board::checkWar(Token* incoming_tile, Cell* cell)
@@ -442,7 +459,7 @@ bool Board::checkWar(Token* incoming_tile, Cell* cell)
 		newArea(incoming_tile);
 		incoming_tile->setCell(cell);
 		cell->setToken(incoming_tile);
-		return false;
+		return true;
 	}
 
 	std::vector<Area*> adj_kingdoms;
@@ -469,7 +486,7 @@ bool Board::checkWar(Token* incoming_tile, Cell* cell)
 			fuzeAreas(adj_kingdoms);
 			incoming_tile->setCell(cell);
 			cell->setToken(incoming_tile);
-			return false;
+			return true;
 		}
 	}
 	else if (adj_kingdoms.size() == 1)
@@ -492,7 +509,7 @@ bool Board::checkWar(Token* incoming_tile, Cell* cell)
 	}
 	incoming_tile->setCell(cell);
 	cell->setToken(incoming_tile);
-	return false;
+	return true;
 }
 
 
@@ -713,12 +730,10 @@ bool Board::placeToken(Token* token, std::vector<std::string> args)
 
 	if (token->isLeader())
 	{
-		checkRevolt(token, cell);
+		return checkRevolt(token, cell);
 	}
 	else
-		checkWar(token, cell);
-
-	return true;
+		return checkWar(token, cell);
 }
 
 std::vector<Area*> Board::getAdjacentAreas(const Position &pos)
@@ -815,15 +830,19 @@ bool Player::placeLeader(const std::vector<std::string>& args)
 			Position pos = tokens[i]->getPosition();
 			if (pos.x != -1)
 			{
-				board->cells[tokens[i]->getPosition().x][tokens[i]->getPosition().y]->setToken(nullptr);
+				board->cells[pos.x][pos.y]->setToken(nullptr);
 
 				tokens[i]->setCell(nullptr);
+				if (tokens[i]->getArea() != nullptr)
+				{
+					tokens[i]->getArea()->removeTokenFromArea(tokens[i]);
+					tokens[i]->setArea(nullptr);
+				}
 				board->dissolveArea(pos);
 			}
 			//leader on the hand
 			if (board->placeToken(tokens[i], args))
 			{
-				//tokens.erase(std::remove(tokens.begin(), tokens.end(), tokens[i]), tokens.end());
 				return true;
 			}
 			else
