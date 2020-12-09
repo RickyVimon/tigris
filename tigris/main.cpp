@@ -155,7 +155,7 @@ public:
 
 	void dissolveArea(const Position &pos, Area* area);
 
-	std::vector<Token*> findIsland(Token * tok);
+	void findIsland(Token * current_token, std::vector<Token*> island_tokens, std::vector<Token*> pool);
 
 	void RegionCatastrophe(const Position & pos);
 	bool isPositionCorrect(const Position & pos);
@@ -302,8 +302,16 @@ void Board::dissolveArea(const Position &pos, Area* area)
 
 	for (unsigned int i = 0; i < colliding_tokens.size(); ++i)
 	{
-		std::vector<Token*> island_tokens = findIsland(colliding_tokens[i]);
-		newArea(island_tokens);
+		std::vector<Token*> island_tokens, pool;
+		pool = getAdjacentTokens(colliding_tokens[i]->getPosition());
+		while (pool.size() != 0)
+		{
+			findIsland(pool[0], island_tokens, pool);
+		}
+		if (island_tokens.size() > 0)
+		{
+			newArea(island_tokens);
+		}
 		//update area to all tokens
 		for (unsigned int k = 0; k < island_tokens.size(); ++k)
 		{
@@ -313,12 +321,34 @@ void Board::dissolveArea(const Position &pos, Area* area)
 	}
 }
 
-std::vector<Token*> Board::findIsland(Token* tok)
+void Board::findIsland(Token* current_token, std::vector<Token*> island_tokens, std::vector<Token*> pool)
 {
-	std::vector<Token*> island_tokens;
+	//send current_token to visited
+	island_tokens.emplace_back(current_token);
+	//remove current token from the pool
+	pool.erase(std::remove(pool.begin(), pool.end(), current_token), pool.end());
+	
+	std::vector<Token*> colliding_tokens = getAdjacentTokens(current_token->getPosition());
 
-	return island_tokens;
+	for (unsigned int i = 0; i < colliding_tokens.size(); ++i)
+	{
+		//Check if that node was alredy visited
+		if (std::find(island_tokens.begin(), island_tokens.end(), colliding_tokens[i]) != island_tokens.end())
+		{
+			continue;
+		}
+		//check if that token is in the pool pending to be visited
+		else if (std::find(pool.begin(), pool.end(), colliding_tokens[i]) != pool.end())
+		{
+			continue;
+		}
+		else
+			//Otherwise just add it to the pool
+			pool.emplace_back(colliding_tokens[i]);
+	}
+	
 }
+
 
 
 void Cell::setToken(Token* t)
