@@ -588,7 +588,7 @@ std::vector<Token*> Board::getAdjacentTokens(const Position &pos)
 	std::vector<Token*> adjacent_tokens;
 	adjacent_tokens.clear();
 	Cell* c;
-	if (pos.x + 1 <= BOARD_WIDTH)
+	if (pos.x + 1 < BOARD_WIDTH)
 	{
 		Position temp_pos = pos;
 		temp_pos.x += 1;
@@ -597,7 +597,7 @@ std::vector<Token*> Board::getAdjacentTokens(const Position &pos)
 			adjacent_tokens.emplace_back(c->getToken());
 
 	}
-	if (pos.x - 1 >= 0)
+	if (pos.x - 1 > 0)
 	{
 		Position temp_pos1 = pos;
 		temp_pos1.x -= 1;
@@ -606,7 +606,7 @@ std::vector<Token*> Board::getAdjacentTokens(const Position &pos)
 			adjacent_tokens.emplace_back(c->getToken());
 
 	}
-	if (pos.y + 1 <= BOARD_LENGTH)
+	if (pos.y + 1 < BOARD_LENGTH)
 	{
 		Position temp_pos2 = pos;
 		temp_pos2.y += 1;
@@ -614,7 +614,7 @@ std::vector<Token*> Board::getAdjacentTokens(const Position &pos)
 		if (!isCellEmpty(temp_pos2) && !c->isCatastrophe() && (c->getToken()->getType() != Type::invalid))
 			adjacent_tokens.emplace_back(c->getToken());
 	}
-	if (pos.y - 1 >= 0)
+	if (pos.y - 1 > 0)
 	{
 		Position temp_pos3 = pos;
 		temp_pos3.y -= 1;
@@ -1107,9 +1107,29 @@ public:
 
 			if (input_lines[i] == "----")
 			{
-				players[current_player]->resetActions();
-				nextPlayer();
-				continue;
+				//count missing tiles
+				int tiles = 0;
+				for (unsigned k = 0; k < players[current_player]->tokens.size(); ++k)
+				{
+					if (!players[current_player]->tokens[k]->isLeader())
+						++tiles;
+				}
+				if ((6 - tiles) != 0)
+				{
+					std::cout << "exception: invalid number or player tiles\n";
+					//next line
+					
+					continue;
+				}
+				else
+				{
+					players[current_player]->resetActions();
+					nextPlayer();
+				}
+				++i;
+				//endgame
+				if (i > input_lines.size() - 1)
+					break;
 			}
 
 
@@ -1315,7 +1335,7 @@ int main()
 	std::vector<std::string> input_reading;
 	input_reading = g.readInput();
 	g.startGame(input_reading);
-
+	//g.nextPlayer();
 	//end Game
 	
 
