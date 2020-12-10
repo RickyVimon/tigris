@@ -24,6 +24,7 @@
 #define BOARD_WIDTH 16
 #define BOARD_LENGTH 11
 
+
 //Forward declarations
 class Board;
 class Player;
@@ -31,12 +32,22 @@ class Token;
 class Cell;
 class Area;
 
-
-
 struct Position
 {
 	int x;
 	int y;
+};
+
+enum Commands {
+	invalid,
+	tile,
+	leader,
+	refresh,
+	treasure,
+	catastrophe,
+	revolt,
+	war,
+	monument
 };
 
 enum class Type
@@ -161,6 +172,12 @@ public:
 
 	bool checkRevolt(Token* leader_token, Cell* c);
 
+	void solveRevolt(std::vector<std::string> args);
+
+	bool solveWar(std::vector<std::string> args);
+
+	bool buildMonument(std::vector<std::string> args);
+
 	bool checkWar(Token* tile_token, Cell* c);
 
 	bool isPositionCorrect(const Position & pos);
@@ -199,7 +216,7 @@ public:
 	std::vector<Area*> areas;
 	bool flag_war = false;
 	bool flag_revolt = false;
-	bool flag_notprint = false;
+	Token* conflict_token = nullptr;
 
 };
 
@@ -230,8 +247,10 @@ public:
 	bool takeTreasure() { bool out = istreasure; if (istreasure) istreasure = false; return out; };
 	bool isTreasure() { return istreasure; };
 	bool isMonument() { return ismonument; };
+	void setMonument(bool s) { ismonument = s; };
 	void Destroy();
 	void backToHand();
+	void changeType(Type t) { type = t; };
 
 public:
 	Player* owner;
@@ -293,6 +312,32 @@ private:
 	int actions = 2;
 	std::vector<int> victory_points;
 	int treasures = 0;
+};
+
+class Game
+{
+public:
+
+	Game()
+	{
+		board = new Board();
+		board->init();;
+	};
+	~Game()
+	{
+	}
+
+	void addNewPlayer(std::string initial_tiles);
+	void nextPlayer();
+	std::vector<std::string> readInput();
+	void startGame(std::vector<std::string> input_lines);
+	Commands resolveCommand(std::string input);
+
+private:
+	//index to track the current player
+	int current_player;
+	std::vector<Player*> players;
+	Board* board;
 };
 
 
@@ -418,7 +463,7 @@ bool Player::hasActionsLeft()
 
 void Player::winPoint(const int &index)
 {
-	if((unsigned int)index > 0 && index <= victory_points.size())
+	if(index > 0 && (unsigned int)index <= victory_points.size())
 	++victory_points[index - 1];
 }
 
@@ -431,8 +476,8 @@ void Player::takeTreasures(const std::vector<std::string>& args)
 {
 	//Check if position is correct within the board dimensions.
 	Position p;
-	p.x = std::stoi(args[1]);
-	p.y = std::stoi(args[2]);
+	p.x = stoi(args[1]);
+	p.y = stoi(args[2]);
 	if (!board->isPositionCorrect(p))
 	{
 		std::cout << "exception: invalid board space position \n";
@@ -469,10 +514,11 @@ bool Board::checkRevolt(Token* leader_token, Cell* cell)
 	{
 		for (unsigned int i = 0; i < adjacent_areas[last_index_kingdom]->area_tokens.size(); ++i)
 		{
-			if (adjacent_areas[last_index_kingdom]->area_tokens[i]->getType() == leader_token->getType())
+			if (adjacent_areas[last_index_kingdom]->area_tokens[i]->isLeader() && adjacent_areas[last_index_kingdom]->area_tokens[i]->getType() == leader_token->getType())
 			{
 				//call for revolt;
-				flag_revolt = true;
+				flag_revolt = true;				
+				conflict_token = leader_token; 
 				return true;
 			}
 		}
@@ -491,6 +537,130 @@ bool Board::checkRevolt(Token* leader_token, Cell* cell)
 	leader_token->setCell(cell);
 	cell->setToken(leader_token);
 	return true;
+}
+
+void Board::solveRevolt(std::vector<std::string> args)
+{
+	if (conflict_token == nullptr)
+	{
+		std::cout << "exception: no leader found on that revolt";
+		return;
+	}
+	Position p;
+	p.x = stoi(args[1]);
+	p.y = stoi(args[2]);
+	if (!isPositionCorrect(p))
+	{
+		std::cout << "exception: invalid board space position \n";
+		return;
+	}
+
+	Token* defender = nullptr;
+	for (unsigned int i = 0; i < conflict_token->area->area_tokens.size(); ++i)
+	{
+		if (conflict_token->area->area_tokens[i]->getType() == conflict_token->getType() && conflict_token->area->area_tokens[i]!=conflict_token && conflict_token->area->area_tokens[i]->isLeader())
+		{
+			defender = conflict_token->area->area_tokens[i];
+		}
+	}
+	if (defender == nullptr)
+		return;
+	
+	std::vector<Token*> attacker_tokens, defender_tokens;
+	attacker_tokens = getAdjacentTokens(conflict_token->getPosition());
+	defender_tokens = getAdjacentTokens(defender->getPosition());
+
+	//Count adjacent temples
+	int attacker_temples = 0, defender_temples = 0;
+	for (unsigned  i = 0; i < attacker_tokens.size(); ++i)
+	{
+		if (!attacker_tokens[i]->isLeader() && (attacker_tokens[i]->getType() == Type::red))
+			attacker_temples++;
+	}
+	for (unsigned int i = 0; i < defender_tokens.size(); ++i)
+	{
+		if (!defender_tokens[i]->isLeader() && (defender_tokens[i]->getType() == Type::red))
+			defender_temples++;
+	}
+
+	attacker_temples += stoi(args[1]);
+	attacker_temples += stoi(args[2]);
+
+	if (attacker_temples < defender_temples)
+	{
+		//attaker wins
+		Position p = defender->getPosition();
+		defender->backToHand();
+		dissolveArea(p);
+	}
+	else
+	{
+		//defender wins
+		Position p = conflict_token->getPosition();
+		conflict_token->backToHand();
+		dissolveArea(p);
+	}
+
+
+}
+
+bool Board::solveWar(std::vector<std::string> args)
+{
+	Position p;
+	p.x = stoi(args[2]);
+	p.y = stoi(args[3]);
+	if (!isPositionCorrect(p))
+	{
+		std::cout << "exception: invalid board space position \n";
+		return false;
+	}
+	//TODO: Check number of tiles of the same color of the original areas.
+
+	return false;
+}
+
+bool Board::buildMonument(std::vector<std::string> args)
+{
+	Position p;
+	p.x = stoi(args[3]);
+	p.y = stoi(args[4]);
+	{
+		std::cout << "exception: invalid board space position \n";
+		return false;
+	}
+	Cell* cell1 = cells[p.x][p.y];
+	Cell* cell2 = cells[cell1->getPosition().x][cell1->getPosition().y + 1];
+	Cell* cell3 = cells[cell1->getPosition().x + 1][cell1->getPosition().y];
+	Cell* cell4 = cells[cell1->getPosition().x + 1][cell1->getPosition().y + 1];
+	Token* cell1_tok = cell1->getToken();
+	Token* cell2_tok = cell2->getToken();
+	Token* cell3_tok = cell3->getToken();
+	Token* cell4_tok = cell4->getToken();
+	
+
+	if (cell1_tok->getType() == cell2_tok->getType() && cell3_tok->getType() == cell4_tok->getType() && cell1_tok->getType() == cell3_tok->getType())
+	{
+		if (!existsType(args[2]))
+		{
+			return false;
+		}
+	
+		//we can build the monument
+		cell1_tok->setMonument(true);
+		cell2_tok->setMonument(true);
+		cell3_tok->setMonument(true);
+		cell4_tok->setMonument(true);
+
+		cell1_tok->changeType(checkType(args[2]));
+		cell2_tok->changeType(checkType(args[2]));
+		cell3_tok->changeType(checkType(args[2]));
+		cell4_tok->changeType(checkType(args[2]));
+
+		return true;
+	}
+	else
+		return false;
+
 }
 
 bool Board::checkWar(Token* incoming_tile, Cell* cell)
@@ -629,8 +799,8 @@ bool Board::solveCatastrophe(const std::vector<std::string> &args)
 {
 	//Check if position is correct within the board dimensions.
 	Position pos;
-	pos.x = std::stoi(args[1]);
-	pos.y = std::stoi(args[2]);
+	pos.x = stoi(args[1]);
+	pos.y = stoi(args[2]);
 	if (!isPositionCorrect(pos))
 	{
 		std::cout << "exception: invalid board space position \n";
@@ -713,7 +883,7 @@ void Board::fuzeAreas(std::vector<Area*> areas_to_fuze)
 	std::vector<Token*> tokens_to_fuze;
 	for (unsigned int i = 0; i < areas_to_fuze.size(); ++i)
 	{
-		for (unsigned k = 0; k < areas_to_fuze[i]->area_tokens.size(); ++k)
+		for (unsigned int k = 0; k < areas_to_fuze[i]->area_tokens.size(); ++k)
 		{
 			tokens_to_fuze.emplace_back(areas_to_fuze[i]->area_tokens[k]);
 		}
@@ -763,7 +933,7 @@ bool Board::hasAdjacentTemple(const Position &pos)
 	if (isPositionCorrect(pos))
 	{
 		std::vector<Token*> adjacent_tokens = getAdjacentTokens(pos);
-		for (unsigned int i = 0; i < adjacent_tokens.size(); ++i)
+		for (unsigned  int i = 0; i < adjacent_tokens.size(); ++i)
 		{
 			if (!adjacent_tokens[i]->isLeader() && adjacent_tokens[i]->getType() == checkType("temple"))
 			{
@@ -815,8 +985,8 @@ bool Board::placeToken(Token* token, std::vector<std::string> args)
 {
 	//Check if position is correct within the board dimensions.
 	Position p;
-	p.x = std::stoi(args[2]);
-	p.y = std::stoi(args[3]);
+	p.x = stoi(args[2]);
+	p.y = stoi(args[3]);
 	if (!isPositionCorrect(p))
 	{
 		std::cout << "exception: invalid board space position \n";
@@ -872,7 +1042,7 @@ std::vector<Area*> Board::getAdjacentAreas(const Position &pos)
 	Area* new_area;
 	std::vector<Area*> areas;
 
-	if (pos.x + 1 <= BOARD_WIDTH)
+	if ((pos.x + 1) < BOARD_WIDTH)
 	{
 		Position temp_pos = pos;
 		temp_pos.x += 1;
@@ -880,7 +1050,7 @@ std::vector<Area*> Board::getAdjacentAreas(const Position &pos)
 		if (new_area != nullptr)
 			areas.emplace_back(new_area);
 	}
-	if (pos.x - 1 >= 0)
+	if ((pos.x - 1) >= 0)
 	{
 		Position temp_pos = pos;
 		temp_pos.x -= 1;
@@ -888,7 +1058,7 @@ std::vector<Area*> Board::getAdjacentAreas(const Position &pos)
 		if (new_area != nullptr)
 			areas.emplace_back(new_area);
 	}
-	if (pos.y + 1 <= BOARD_LENGTH)
+	if ((pos.y + 1) < BOARD_LENGTH)
 	{
 		Position temp_pos = pos;
 		temp_pos.y += 1;
@@ -896,7 +1066,7 @@ std::vector<Area*> Board::getAdjacentAreas(const Position &pos)
 		if (new_area != nullptr)
 			areas.emplace_back(new_area);
 	}
-	if (pos.y - 1 >= 0)
+	if ((pos.y - 1) >= 0)
 	{
 		Position temp_pos = pos;
 		temp_pos.y -= 1;
@@ -989,7 +1159,7 @@ bool Player::placeLeader(const std::vector<std::string>& args)
 {
 	//count missing tiles
 	int tiles = 0;
-	for (unsigned k = 0; k < tokens.size(); ++k)
+	for (unsigned int k = 0; k < tokens.size(); ++k)
 	{
 		if (!tokens[k]->isLeader())
 			++tiles;
@@ -997,7 +1167,7 @@ bool Player::placeLeader(const std::vector<std::string>& args)
 	if ((6 - tiles) != (args.size() - 2))
 	{
 		std::cout << "exception: invalid number or player tiles \n";
-		board->flag_notprint = true;
+
 		return;
 	}
 
@@ -1020,14 +1190,7 @@ Position Token::getPosition()
 	p.y = -1;
 	if (cell != nullptr)
 	{
-		try
-		{
-			p = cell->getPosition();
-		}
-		catch(int e)
-		{
-
-		}
+		p = cell->getPosition();
 	}
 	return p;
 };
@@ -1037,9 +1200,9 @@ void Board::init()
 {
 	Player* p = nullptr;
 	int count = 0;
-	for (int i = 0; i < BOARD_LENGTH; ++i)
+	for (unsigned int i = 0; i < BOARD_LENGTH; ++i)
 	{
-		for (int j = 0; j < BOARD_WIDTH; ++j)
+		for (unsigned int j = 0; j < BOARD_WIDTH; ++j)
 		{
 			Cell* c = new Cell(j, i, init_board[count]);
 			cells[j][i] = c;
@@ -1053,257 +1216,229 @@ void Board::init()
 	}
 }
 
-class Game
+
+std::vector<std::string> Game::readInput()
 {
-	enum Commands {
-		invalid,
-		tile,
-		leader,
-		refresh,
-		treasure,
-		catastrophe,
-		revolt,
-		war,
-		monument
+	std::vector<std::string> input;
+	std::string line;
+	while (std::getline(std::cin, line))
+	{
+		if (line == "")
+			return input;
+		input.emplace_back(line);
+	}
+	return input;
+};
+
+void Game::addNewPlayer(std::string initial_tiles)
+{
+	Player* p = new Player(board, initial_tiles);
+	players.emplace_back(p);
+}
+
+Commands Game::resolveCommand(std::string input)
+{
+	static const std::map<std::string, Commands> optionCommands
+	{
+		{ "tile", tile },
+		{ "leader", leader },
+		{ "refresh", refresh },
+		{ "treasure", treasure },
+		{ "catastrophe", catastrophe },
+		{ "revolt", revolt },
+		{ "war", war },
+		{ "monument", monument },
+
 	};
 
-public:
-
-	Game() 
-	{
-		board = new Board();
-		board->init();;
-	};
-	~Game()
-	{
+	auto itr = optionCommands.find(input);
+	if (itr != optionCommands.end()) {
+		return itr->second;
 	}
+	return invalid;
+}
 
-	void addNewPlayer(std::string initial_tiles) 
+void Game::startGame(std::vector<std::string> input_lines)
+{
+
+	for (unsigned int i = 0; i < input_lines.size(); ++i)
 	{
-		Player* p = new Player(board, initial_tiles);
-		players.emplace_back(p);
-	}
 
-	void nextPlayer();
-
-	std::vector<std::string> readInput() 
-	{
-		std::vector<std::string> input;
-		std::string line;
-		while (std::getline(std::cin, line))
+		if (input_lines[i] == "----")
 		{
-			if (line == "")
-				return input;
-			input.emplace_back(line);
+			//count missing tiles
+			int tiles = 0;
+			for (unsigned int k = 0; k < players[current_player]->tokens.size(); ++k)
+			{
+				if (!players[current_player]->tokens[k]->isLeader())
+					++tiles;
+			}
+			if ((6 - tiles) != 0)
+			{
+				std::cout << "exception: invalid number or player tiles\n";
+				//next line
+
+				continue;
+			}
+			else
+			{
+				players[current_player]->resetActions();
+				nextPlayer();
+			}
+			++i;
+			//endgame
+			if (i > input_lines.size() - 1)
+				break;
 		}
-		return input;
-	};
 
-	void startGame(std::vector<std::string> input_lines)
-	{
 
-		for(unsigned int i = 0; i < input_lines.size(); ++i)
+		size_t pos = 0;
+		std::string delimiter = " ";
+		std::vector<std::string> arguments;
+		while ((pos = input_lines[i].find(delimiter)) < 20)
 		{
+			arguments.emplace_back(input_lines[i].substr(0, pos));
+			input_lines[i].erase(0, pos + delimiter.length());
+		}
+		arguments.emplace_back(input_lines[i]);
 
-			if (input_lines[i] == "----")
+
+		//call dictionary command, args;
+		switch (resolveCommand(arguments[0]))
+		{
+		case tile:
+			if (board->flag_revolt || board->flag_war)
 			{
-				//count missing tiles
-				int tiles = 0;
-				for (unsigned k = 0; k < players[current_player]->tokens.size(); ++k)
-				{
-					if (!players[current_player]->tokens[k]->isLeader())
-						++tiles;
-				}
-				if ((6 - tiles) != 0)
-				{
-					std::cout << "exception: invalid number or player tiles\n";
-					//next line
-					
-					continue;
-				}
-				else
-				{
-					players[current_player]->resetActions();
-					nextPlayer();
-				}
-				++i;
-				//endgame
-				if (i > input_lines.size() - 1)
-					break;
+				std::cout << "board has unresolved conflicts\n";
+				continue;
 			}
-
-
-			size_t pos = 0;
-			std::string delimiter = " ";
-			std::vector<std::string> arguments;
-			while ((pos = input_lines[i].find(delimiter)) < 20)
+			if (arguments.size() != 4)
 			{
-				arguments.emplace_back(input_lines[i].substr(0, pos));
-				input_lines[i].erase(0, pos + delimiter.length());
-			}
-			arguments.emplace_back(input_lines[i]);
-
-
-			//call dictionary command, args;
-			switch (resolveCommand(arguments[0]))
-			{
-			case tile:
-				if (board->flag_revolt || board->flag_war)
-				{
-					std::cout << "board has unresolved conflicts\n";
-					continue;
-				}
-				if (arguments.size() != 4)
-				{
-					std::cout << "invalid command \n";
-				}
-				else if (players[current_player]->hasActionsLeft())
-				{
-					if(players[current_player]->placeTile(arguments))
-						players[current_player]->useAction();
-				}
-				break;
-
-			case leader:
-				if (board->flag_revolt || board->flag_war)
-				{
-					std::cout << "board has unresolved conflicts\n";
-					continue;
-				}
-				if (arguments.size() != 4)
-				{
-					std::cout << "invalid command \n";
-				}
-				else if (players[current_player]->hasActionsLeft())
-				{
-					if (players[current_player]->placeLeader(arguments))
-						players[current_player]->useAction();
-				}
-				break;
-
-			case refresh:
-				if (board->flag_revolt || board->flag_war)
-				{
-					std::cout << "board has unresolved conflicts\n";
-					continue;
-				}
-					players[current_player]->refreshTiles(arguments);
-				break;
-
-			case treasure:
-				if (board->flag_revolt || board->flag_war)
-				{
-					std::cout << "board has unresolved conflicts\n";
-					continue;
-				}
-				if(arguments.size()!= 3)
-					std::cout << "exception: taking incorrect number of treasures\n";
-				else
-				{
-					players[current_player]->takeTreasures(arguments);
-				}
-				break;
-
-			case catastrophe:
-				if (board->flag_revolt || board->flag_war)
-				{
-					std::cout << "exception: board has unresolved conflicts\n";
-					continue;
-				}
-				if (arguments.size() != 3)
-				{
-					std::cout << "invalid command \n";
-					continue;
-				}
-				else
-				{
-					if (players[current_player]->catastrophe_tiles <= 0)
-					{
-						std::cout << "exception: invalid number or player tiles \n";
-					}
-					else if (board->solveCatastrophe(arguments))
-					{
-						players[current_player]->useAction();
-						--players[current_player]->catastrophe_tiles;
-					}
-				}
-					
-				break;
-
-			case revolt:
-				if (!board->flag_revolt)
-				{
-					std::cout << "exception: could not find conflict attacker or deffender\n";
-					continue;
-				}
-				board->flag_revolt = false;
-				break;
-
-			case war:
-				if (!board->flag_war)
-				{
-					std::cout << "could not find conflict attacker or deffender\n";
-					continue;
-				}
-				board->flag_war = false;
-				break;
-
-			case monument:
-				if (board->flag_revolt || board->flag_war)
-				{
-					std::cout << "board has unresolved conflicts\n";
-					continue;
-				}
-				break;
-
-
-			default:
 				std::cout << "invalid command \n";
 			}
+			else if (players[current_player]->hasActionsLeft())
+			{
+				if (players[current_player]->placeTile(arguments))
+					players[current_player]->useAction();
+			}
+			break;
+
+		case leader:
+			if (board->flag_revolt || board->flag_war)
+			{
+				std::cout << "board has unresolved conflicts\n";
+				continue;
+			}
+			if (arguments.size() != 4)
+			{
+				std::cout << "invalid command \n";
+			}
+			else if (players[current_player]->hasActionsLeft())
+			{
+				if (players[current_player]->placeLeader(arguments))
+					players[current_player]->useAction();
+			}
+			break;
+
+		case refresh:
+			if (board->flag_revolt || board->flag_war)
+			{
+				std::cout << "board has unresolved conflicts\n";
+				continue;
+			}
+			players[current_player]->refreshTiles(arguments);
+			break;
+
+		case treasure:
+			if (board->flag_revolt || board->flag_war)
+			{
+				std::cout << "board has unresolved conflicts\n";
+				continue;
+			}
+			if (arguments.size() != 3)
+				std::cout << "exception: taking incorrect number of treasures\n";
+			else
+			{
+				players[current_player]->takeTreasures(arguments);
+			}
+			break;
+
+		case catastrophe:
+			if (board->flag_revolt || board->flag_war)
+			{
+				std::cout << "exception: board has unresolved conflicts\n";
+				continue;
+			}
+			if (arguments.size() != 3)
+			{
+				std::cout << "invalid command \n";
+				continue;
+			}
+			else
+			{
+				if (players[current_player]->catastrophe_tiles <= 0)
+				{
+					std::cout << "exception: invalid number or player tiles \n";
+				}
+				else if (board->solveCatastrophe(arguments))
+				{
+					players[current_player]->useAction();
+					--players[current_player]->catastrophe_tiles;
+				}
+			}
+
+			break;
+
+		case revolt:
+			if (!board->flag_revolt)
+			{
+				std::cout << "exception: could not find conflict attacker or deffender\n";
+				continue;
+			}
+			if (arguments.size() != 3)
+			{
+				std::cout << "invalid command \n";
+				continue;
+			}
+			board->solveRevolt(arguments);
+			board->flag_revolt = false;
+			break;
+
+		case war:
+			if (!board->flag_war)
+			{
+				std::cout << "could not find conflict attacker or deffender\n";
+				continue;
+			}
+			board->flag_war = false;
+			break;
+
+		case monument:
+			if (board->flag_revolt || board->flag_war)
+			{
+				std::cout << "board has unresolved conflicts\n";
+				continue;
+			}
+			board->buildMonument(arguments);
+			break;
+
+
+		default:
+			std::cout << "invalid command \n";
 		}
-	};
-
-	Commands resolveCommand(std::string input)
-	{
-		static const std::map<std::string, Commands> optionCommands
-		{
-			{ "tile", tile },
-			{ "leader", leader },
-			{ "refresh", refresh },
-			{ "treasure", treasure },
-			{ "catastrophe", catastrophe },
-			{ "revolt", revolt },
-			{ "war", war },
-			{ "monument", monument },
-
-		};
-
-		auto itr = optionCommands.find(input);
-		if (itr != optionCommands.end()) {
-			return itr->second;
-		}
-		return invalid;
 	}
-
-
-private:
-	//index to track the current player
-	int current_player;
-	std::vector<Player*> players;
-	Board* board;
 };
 
 void Game::nextPlayer()
 {
-	for (unsigned int k = 0; k < players.size(); ++k)
+	for (unsigned int k = 0; k < players.size() ; k++)
 	{
 		players[k]->printPoints();
 	}
 	std::cout << "----\n";
-	if ((unsigned int)(current_player + 1) >= players.size())
+	if ((unsigned int)((current_player + 1)) >= players.size())
 	{
 		current_player = 0;
-
 		
 	}
 	else
@@ -1335,7 +1470,6 @@ int main()
 	std::vector<std::string> input_reading;
 	input_reading = g.readInput();
 	g.startGame(input_reading);
-	//g.nextPlayer();
 	//end Game
 	
 
