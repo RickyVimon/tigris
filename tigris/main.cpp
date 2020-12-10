@@ -70,7 +70,7 @@ Type checkType(std::string t)
 	{
 		return Type::red;
 	}
-	else if (t == "market" || t == "merchant")
+	else if (t == "market" || t == "trader")
 	{
 		return Type::green;
 	}
@@ -79,7 +79,7 @@ Type checkType(std::string t)
 
 bool existsType(std::string t)
 {
-	if (t == "settlement" || t == "king" || t == "farm" || t == "farmer" || t == "temple" || t == "priest" || t == "market" || t == "merchant")
+	if (t == "settlement" || t == "king" || t == "farm" || t == "farmer" || t == "temple" || t == "priest" || t == "market" || t == "trader")
 	{
 		return true;
 	}
@@ -172,6 +172,8 @@ public:
 	bool hasAdjacentTemple(const Position &pos);
 	void solveCatastrophe(const Position &pos);
 
+	void takeTreasure(const Position & pos);
+
 	void fuzeAreas(std::vector<Area*> areas_to_fuze);
 
 	
@@ -194,6 +196,9 @@ public:
 
 	Cell* cells[BOARD_WIDTH][BOARD_LENGTH];
 	std::vector<Area*> areas;
+	bool flag_war = false;
+	bool flag_revolt = false;
+	bool flag_notprint = false;
 
 };
 
@@ -202,7 +207,7 @@ class Token
 {
 
 public:
-	Token(Board* b, Player* p, Cell* c, Type t, bool il = false) : board(b), owner(p), cell(c), type(t), isleader(il){}
+	Token(Board* b, Player* p, Cell* c, Type t, bool il = false, bool tr = false) : board(b), owner(p), cell(c), type(t), isleader(il), treasure(tr){}
 
 	Token(Board* b, Player* p, Cell* c, std::string t)
 	{
@@ -221,6 +226,7 @@ public:
 	void setArea(Area* a) { if (a != nullptr) area = a; };
 	Area* getArea() { return area; };
 	bool isLeader() { return isleader; }
+	bool takeTreasure() { bool out = treasure; if (treasure) treasure = false; return out; };
 
 public:
 	Player* owner;
@@ -231,6 +237,7 @@ protected:
 	Type type;
 	Board* board;
 	bool isleader;
+	bool treasure;
 };
 
 
@@ -266,6 +273,8 @@ public:
 	int getTreasures() { return treasures; };
 	void winPoint(const int &index);
 	void printPoints();
+	void takeTreasures(const std::vector<std::string>& args);
+	void addTreasures() { ++treasures; };
 
 	std::vector<int> getVictoryPoints() { return victory_points; };
 	std::vector<Token*> tokens;
@@ -400,6 +409,20 @@ void Player::printPoints()
 	std::cout << "victory " << getTreasures() << " (" << victory_points[0] << " " << victory_points[1] << " " << victory_points[2] << " " << victory_points[3] << ")\n";
 }
 
+void Player::takeTreasures(const std::vector<std::string>& args)
+{
+	//Check if position is correct within the board dimensions.
+	Position p;
+	p.x = std::stoi(args[1]);
+	p.y = std::stoi(args[2]);
+	if (!board->isPositionCorrect(p))
+	{
+		std::cout << "exception: invalid board space position \n";
+		return;
+	}
+	board->takeTreasure(p);
+}
+
 void Token::setCell(Cell*c)
 {
 	cell = c;
@@ -431,6 +454,7 @@ bool Board::checkRevolt(Token* leader_token, Cell* cell)
 			if (adjacent_areas[last_index_kingdom]->area_tokens[i]->getType() == leader_token->getType())
 			{
 				//call for revolt;
+				flag_revolt = true;
 				return true;
 			}
 		}
@@ -479,6 +503,7 @@ bool Board::checkWar(Token* incoming_tile, Cell* cell)
 		if (adj_kingdoms[0]->getLeader()->getType() == adj_kingdoms[1]->getLeader()->getType())
 		{
 			//war conflict
+			flag_war = true;
 			return true;
 		}
 		else
@@ -595,6 +620,29 @@ void Board::solveCatastrophe(const Position &pos)
 			cell->setTypeCatastrophe();
 
 		dissolveArea(pos);
+	}
+}
+
+void Board::takeTreasure(const Position &pos)
+{
+	Cell* c = getCell(pos);
+	if (c->isEmpty())
+	{
+		std::cout << "exception: trying to take treasure where there is none\n";
+	}
+	else
+	{
+		Token* leader = c->getToken()->area->getLeader();
+		if(leader != nullptr)
+			if (leader->getType() == Type::green)
+			{
+				if (c->getToken()->takeTreasure())
+				{
+					leader->owner->addTreasures();
+				}
+				else
+					std::cout << "exception: trying to take treasure where there is none\n";
+			}
 	}
 }
 
@@ -855,7 +903,7 @@ bool Player::placeLeader(const std::vector<std::string>& args)
 	return false;
 };
 
-void Player::refreshTiles(std::vector<std::string> args)
+ void Player::refreshTiles(std::vector<std::string> args)
 {
 	//count missing tiles
 	int tiles = 0;
@@ -867,6 +915,7 @@ void Player::refreshTiles(std::vector<std::string> args)
 	if ((6 - tiles) != (args.size() - 2))
 	{
 		std::cout << "exception: invalid number or player tiles \n";
+		board->flag_notprint = true;
 		return;
 	}
 
@@ -907,7 +956,7 @@ void Board::init()
 			cells[j][i] = c;
 			if (c->hasTemple())
 			{
-				c->setToken(new Token(this, p, c, Type::red));
+				c->setToken(new Token(this, p, c, Type::red, false, true));
 				newArea(c->getToken());
 			}
 			++count;
@@ -990,6 +1039,11 @@ public:
 			switch (resolveCommand(arguments[0]))
 			{
 			case tile:
+				if (board->flag_revolt || board->flag_war)
+				{
+					std::cout << "board has unresolved conflicts\n";
+					continue;
+				}
 				if (arguments.size() != 4)
 				{
 					std::cout << "invalid command \n";
@@ -1002,6 +1056,11 @@ public:
 				break;
 
 			case leader:
+				if (board->flag_revolt || board->flag_war)
+				{
+					std::cout << "board has unresolved conflicts\n";
+					continue;
+				}
 				if (arguments.size() != 4)
 				{
 					std::cout << "invalid command \n";
@@ -1014,20 +1073,62 @@ public:
 				break;
 
 			case refresh:
+				if (board->flag_revolt || board->flag_war)
+				{
+					std::cout << "board has unresolved conflicts\n";
+					continue;
+				}
 					players[current_player]->refreshTiles(arguments);
 				break;
 
 			case treasure:
+				if (board->flag_revolt || board->flag_war)
+				{
+					std::cout << "board has unresolved conflicts\n";
+					continue;
+				}
+				if(arguments.size()!= 3)
+					std::cout << "exception: taking incorrect number of treasures\n";
+				else
+				{
+					players[current_player]->takeTreasures(arguments);
+				}
 				break;
 
 			case catastrophe:
+				if (board->flag_revolt || board->flag_war)
+				{
+					std::cout << "board has unresolved conflicts\n";
+					continue;
+				}
 				break;
 
 			case revolt:
+				if (!board->flag_revolt)
+				{
+					std::cout << "could not find conflict attacker or deffender\n";
+					continue;
+				}
+				board->flag_revolt = false;
 				break;
 
 			case war:
+				if (!board->flag_war)
+				{
+					std::cout << "could not find conflict attacker or deffender\n";
+					continue;
+				}
+				board->flag_war = false;
 				break;
+
+			case monument:
+				if (board->flag_revolt || board->flag_war)
+				{
+					std::cout << "board has unresolved conflicts\n";
+					continue;
+				}
+				break;
+
 
 			default:
 				std::cout << "invalid command \n";
@@ -1067,11 +1168,12 @@ private:
 
 void Game::nextPlayer()
 {
-	for (unsigned int k = 0; k < players.size(); ++k)
-	{
-		players[k]->printPoints();
-	}
-	std::cout << "----\n";
+
+		for (unsigned int k = 0; k < players.size(); ++k)
+		{
+			players[k]->printPoints();
+		}
+		std::cout << "----\n";
 
 	if ((unsigned int)(current_player + 1) >= players.size())
 	{
