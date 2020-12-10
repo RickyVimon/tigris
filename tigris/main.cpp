@@ -100,7 +100,7 @@ public:
 		type = static_cast<CellType>(t);
 	}
 
-	bool isEmpty() { if (token == nullptr) return true; else return false; };
+	bool isEmpty() { if (token != nullptr) return false; else return true; };
 
 	bool hasTemple() { if (type == CellType::TEMPLE) return true; else return false; };
 
@@ -110,7 +110,8 @@ public:
 
 	void setToken(Token* t);
 	Token* getToken() { return token; };
-	void setTypeCatastrophe() { type = CellType::CATASTROPHE; }
+	void setTypeCatastrophe() { type = CellType::CATASTROPHE; };
+	bool isCatastrophe() { if (type == CellType::CATASTROPHE) return true; else return false; };
 
 private:
 	Position pos;
@@ -170,7 +171,7 @@ public:
 	std::vector<Area*> getAdjacentAreas(const Position &p);
 	std::vector<Token*> getAdjacentTokens(const Position &pos);
 	bool hasAdjacentTemple(const Position &pos);
-	void solveCatastrophe(const Position &pos);
+	bool solveCatastrophe(const std::vector<std::string> &args);
 
 	void takeTreasure(const Position & pos);
 
@@ -207,7 +208,7 @@ class Token
 {
 
 public:
-	Token(Board* b, Player* p, Cell* c, Type t, bool il = false, bool tr = false) : board(b), owner(p), cell(c), type(t), isleader(il), treasure(tr){}
+	Token(Board* b, Player* p, Cell* c, Type t, bool il = false, bool tr = false, bool m = false) : board(b), owner(p), cell(c), type(t), isleader(il), istreasure(tr), ismonument(m){}
 
 	Token(Board* b, Player* p, Cell* c, std::string t)
 	{
@@ -226,18 +227,23 @@ public:
 	void setArea(Area* a) { if (a != nullptr) area = a; };
 	Area* getArea() { return area; };
 	bool isLeader() { return isleader; }
-	bool takeTreasure() { bool out = treasure; if (treasure) treasure = false; return out; };
+	bool takeTreasure() { bool out = istreasure; if (istreasure) istreasure = false; return out; };
+	bool isTreasure() { return istreasure; };
+	bool isMonument() { return ismonument; };
+	void Destroy();
+	void backToHand();
 
 public:
 	Player* owner;
 	Area* area = nullptr;
 
-protected:
+private:
 	Cell* cell;
 	Type type;
 	Board* board;
 	bool isleader;
-	bool treasure;
+	bool istreasure;
+	bool ismonument;
 };
 
 
@@ -279,6 +285,9 @@ public:
 	std::vector<int> getVictoryPoints() { return victory_points; };
 	std::vector<Token*> tokens;
 
+public:
+	int catastrophe_tiles = 2;
+
 private:
 	Board* board;
 	int actions = 2;
@@ -295,8 +304,11 @@ void Board::dissolveArea(const Position &pos)
 	for (unsigned int i = 0; i < colliding_tokens.size(); ++i)
 	{
 		std::vector<Token*> island_tokens, pool;
-		pool = getAdjacentTokens(colliding_tokens[i]->getPosition());
-		//pool.insert(pool.begin(), colliding_tokens[i]);
+		Position p = colliding_tokens[i]->getPosition();
+		if (isPositionCorrect(p))
+		{
+			pool = getAdjacentTokens(p);
+		}
 		while (pool.size() != 0)
 		{
 			findIsland(pool[0], island_tokens, pool);
@@ -321,7 +333,13 @@ void Board::findIsland(Token* current_token, std::vector<Token*> &island_tokens,
 	//remove current token from the pool
 	pool.erase(std::remove(pool.begin(), pool.end(), current_token), pool.end());
 	
-	std::vector<Token*> colliding_tokens = getAdjacentTokens(current_token->getPosition());
+	std::vector<Token*> colliding_tokens;
+	Position p = current_token->getPosition();
+	if (isPositionCorrect(p))
+	{
+		colliding_tokens = getAdjacentTokens(p);
+	}
+
 
 	for (unsigned int i = 0; i < colliding_tokens.size(); ++i)
 	{
@@ -568,59 +586,103 @@ void Board::newArea(Token* token)
 std::vector<Token*> Board::getAdjacentTokens(const Position &pos)
 {
 	std::vector<Token*> adjacent_tokens;
+	adjacent_tokens.clear();
 	Cell* c;
 	if (pos.x + 1 <= BOARD_WIDTH)
 	{
 		Position temp_pos = pos;
 		temp_pos.x += 1;
 		c = cells[temp_pos.x][temp_pos.y];
-		if (!isCellEmpty(temp_pos))
+		if (!isCellEmpty(temp_pos) && !c->isCatastrophe() && (c->getToken()->getType() != Type::invalid))
 			adjacent_tokens.emplace_back(c->getToken());
 
 	}
 	if (pos.x - 1 >= 0)
 	{
-		Position temp_pos = pos;
-		temp_pos.x -= 1;
-		c = cells[temp_pos.x][temp_pos.y];
-		if (!isCellEmpty(temp_pos))
+		Position temp_pos1 = pos;
+		temp_pos1.x -= 1;
+		c = cells[temp_pos1.x][temp_pos1.y];
+		if (!isCellEmpty(temp_pos1) && !c->isCatastrophe() && (c->getToken()->getType() != Type::invalid))
 			adjacent_tokens.emplace_back(c->getToken());
 
 	}
 	if (pos.y + 1 <= BOARD_LENGTH)
 	{
-		Position temp_pos = pos;
-		temp_pos.y += 1;
-		c = cells[temp_pos.x][temp_pos.y];
-		if (!isCellEmpty(temp_pos))
+		Position temp_pos2 = pos;
+		temp_pos2.y += 1;
+		c = cells[temp_pos2.x][temp_pos2.y];
+		if (!isCellEmpty(temp_pos2) && !c->isCatastrophe() && (c->getToken()->getType() != Type::invalid))
 			adjacent_tokens.emplace_back(c->getToken());
 	}
 	if (pos.y - 1 >= 0)
 	{
-		Position temp_pos = pos;
-		temp_pos.y -= 1;
-		c = cells[temp_pos.x][temp_pos.y];
-		if (!isCellEmpty(temp_pos))
+		Position temp_pos3 = pos;
+		temp_pos3.y -= 1;
+		c = cells[temp_pos3.x][temp_pos3.y];
+		if (!isCellEmpty(temp_pos3) && !c->isCatastrophe() && (c->getToken()->getType() != Type::invalid))
 			adjacent_tokens.emplace_back(c->getToken());
 	}
 	return adjacent_tokens;
 }
 
-void Board::solveCatastrophe(const Position &pos)
+bool Board::solveCatastrophe(const std::vector<std::string> &args)
 {
-	if (isPositionCorrect(pos))
+	//Check if position is correct within the board dimensions.
+	Position pos;
+	pos.x = std::stoi(args[1]);
+	pos.y = std::stoi(args[2]);
+	if (!isPositionCorrect(pos))
 	{
-		Cell* cell = getCell(pos);
-		if (!cell->isEmpty())
+		std::cout << "exception: invalid board space position \n";
+		return false;
+	}
+	
+	Cell* cell = getCell(pos);
+	if (!cell->isEmpty())
+	{
+		Token* token_to_destroy = cell->getToken();
+		if (token_to_destroy->isMonument())
 		{
-			Token* token_to_destroy = cell->getToken();
-			delete token_to_destroy;
+			std::cout << "exception: cannot place catastrophe if space is bearing a monument\n";
+			return false;
+		}
+		else if (token_to_destroy->isLeader())
+		{
+			std::cout << "exception: cannot place catastrophe if space alredy contains a leader\n";
+			return false;
+		}
+		else if (token_to_destroy->isTreasure())
+		{
+			std::cout << "exception: cannot place catastrophe if space is bearing a treasure\n";
+			return false;
 		}
 		else
-			cell->setTypeCatastrophe();
+		{
+			if (token_to_destroy->area != nullptr)
+			{
+				Token* leader = token_to_destroy->area->getLeader();
+				if (leader != nullptr)
+				{
+					token_to_destroy->Destroy();
+					if (!hasAdjacentTemple(leader->getPosition()))
+					{
+						leader->backToHand();
+					}
+				}
+			}
+			else
+				token_to_destroy->Destroy();
 
-		dissolveArea(pos);
+			dissolveArea(pos);
+		}
+
 	}
+	else
+		cell->setTypeCatastrophe();
+
+
+	return true;
+
 }
 
 void Board::takeTreasure(const Position &pos)
@@ -677,6 +739,22 @@ bool Token::collidesWith(Token* token)
 	if (abs(this->getPosition().y - token->getPosition().y) == 1 && this->getPosition().x == token->getPosition().x)
 		return true;
 	return false;
+}
+
+void Token::Destroy()
+{
+	this->area = nullptr;
+	this->cell = nullptr;
+	this->owner = nullptr;
+	this->type = Type::invalid;
+}
+
+void Token::backToHand()
+{
+	cell->setToken(nullptr);
+	cell = nullptr;
+	area->removeTokenFromArea(this);
+	area = nullptr;
 }
 
 
@@ -746,6 +824,11 @@ bool Board::placeToken(Token* token, std::vector<std::string> args)
 	}
 
 	Cell* cell = getCell(p);
+	if (cell->isCatastrophe())
+	{
+		std::cout << "exception: board space is already occupied \n";
+		return false;
+	}
 
 	//Check if that cell is alredy ocupied.
 	if (!cell->isEmpty())
@@ -870,14 +953,13 @@ bool Player::placeLeader(const std::vector<std::string>& args)
 		return false;
 	};
 
-	//check if the tile is on the board or at player's hand.
 	for (unsigned int i = 0; i < tokens.size(); ++i)
 	{
 		if (tokens[i]->getType() == checkType(args[1]))
 		{
 			Position pos = tokens[i]->getPosition();
 			if (pos.x != -1)
-			{
+			{		
 				board->cells[pos.x][pos.y]->setToken(nullptr);
 
 				tokens[i]->setCell(nullptr);
@@ -938,7 +1020,14 @@ Position Token::getPosition()
 	p.y = -1;
 	if (cell != nullptr)
 	{
-		p = cell->getPosition();
+		try
+		{
+			p = cell->getPosition();
+		}
+		catch(int e)
+		{
+
+		}
 	}
 	return p;
 };
@@ -1098,15 +1187,33 @@ public:
 			case catastrophe:
 				if (board->flag_revolt || board->flag_war)
 				{
-					std::cout << "board has unresolved conflicts\n";
+					std::cout << "exception: board has unresolved conflicts\n";
 					continue;
 				}
+				if (arguments.size() != 3)
+				{
+					std::cout << "invalid command \n";
+					continue;
+				}
+				else
+				{
+					if (players[current_player]->catastrophe_tiles <= 0)
+					{
+						std::cout << "exception: invalid number or player tiles \n";
+					}
+					else if (board->solveCatastrophe(arguments))
+					{
+						players[current_player]->useAction();
+						--players[current_player]->catastrophe_tiles;
+					}
+				}
+					
 				break;
 
 			case revolt:
 				if (!board->flag_revolt)
 				{
-					std::cout << "could not find conflict attacker or deffender\n";
+					std::cout << "exception: could not find conflict attacker or deffender\n";
 					continue;
 				}
 				board->flag_revolt = false;
@@ -1168,16 +1275,15 @@ private:
 
 void Game::nextPlayer()
 {
-
-		for (unsigned int k = 0; k < players.size(); ++k)
-		{
-			players[k]->printPoints();
-		}
-		std::cout << "----\n";
-
+	for (unsigned int k = 0; k < players.size(); ++k)
+	{
+		players[k]->printPoints();
+	}
+	std::cout << "----\n";
 	if ((unsigned int)(current_player + 1) >= players.size())
 	{
 		current_player = 0;
+
 		
 	}
 	else
@@ -1211,7 +1317,7 @@ int main()
 	g.startGame(input_reading);
 
 	//end Game
-	std::cout << "----";
+	
 
 	return 0;
 }
